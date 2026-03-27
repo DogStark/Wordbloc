@@ -11,121 +11,12 @@
   "lang": "en",
   "icons": [
     {
-      "src": "/icon-72x72.png",
-      "sizes": "72x72",
-      "type": "image/png",
-      "purpose": "any maskable"
-    },
-    {
-      "src": "/icon-96x96.png",
-      "sizes": "96x96",
-      "type": "image/png",
-      "purpose": "any maskable"
-    },
-    {
-      "src": "/icon-128x128.png",
-      "sizes": "128x128",
-      "type": "image/png",
-      "purpose": "any maskable"
-    },
-    {
-      "src": "/icon-144x144.png",
-      "sizes": "144x144",
-      "type": "image/png",
-      "purpose": "any maskable"
-    },
-    {
-      "src": "/icon-152x152.png",
-      "sizes": "152x152",
-      "type": "image/png",
-      "purpose": "any maskable"
-    },
-    {
-      "src": "/icon-192x192.png",
+      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'%3E%3Crect width='192' height='192' fill='%233b82f6'/%3E%3Ctext x='96' y='120' font-size='80' text-anchor='middle' fill='white'%3E🎮%3C/text%3E%3C/svg%3E",
       "sizes": "192x192",
-      "type": "image/png",
-      "purpose": "any maskable"
-    },
-    {
-      "src": "/icon-384x384.png",
-      "sizes": "384x384",
-      "type": "image/png",
-      "purpose": "any maskable"
-    },
-    {
-      "src": "/icon-512x512.png",
-      "sizes": "512x512",
-      "type": "image/png",
+      "type": "image/svg+xml",
       "purpose": "any maskable"
     }
   ],
-  "screenshots": [
-    {
-      "src": "/screenshot-wide.png",
-      "sizes": "1280x720",
-      "type": "image/png",
-      "form_factor": "wide",
-      "label": "SpellBloc gameplay on desktop"
-    },
-    {
-      "src": "/screenshot-narrow.png",
-      "sizes": "720x1280",
-      "type": "image/png",
-      "form_factor": "narrow",
-      "label": "SpellBloc gameplay on mobile"
-    }
-  ],
-  "shortcuts": [
-    {
-      "name": "Quick Play",
-      "short_name": "Play",
-      "description": "Start playing immediately",
-      "url": "/?mode=quick",
-      "icons": [
-        {
-          "src": "/play-shortcut.png",
-          "sizes": "96x96"
-        }
-      ]
-    },
-    {
-      "name": "Parent Dashboard",
-      "short_name": "Dashboard",
-      "description": "View child's progress",
-      "url": "/?screen=dashboard",
-      "icons": [
-        {
-          "src": "/dashboard-shortcut.png",
-          "sizes": "96x96"
-        }
-      ]
-    }
-  ],
-  "related_applications": [
-    {
-      "platform": "play",
-      "url": "https://play.google.com/store/apps/details?id=com.spellbloc.app",
-      "id": "com.spellbloc.app"
-    },
-    {
-      "platform": "itunes",
-      "url": "https://apps.apple.com/app/spellbloc/id123456789"
-    }
-  ],
-  "prefer_related_applications": false,
-  "edge_side_panel": {
-    "preferred_width": 400
-  },
-  "launch_handler": {
-    "client_mode": "focus-existing"
-  },
-  "handle_links": "preferred",
   "scope": "/",
-  "id": "spellbloc-pwa",
-  "protocol_handlers": [
-    {
-      "protocol": "web+spellbloc",
-      "url": "/?action=%s"
-    }
-  ]
+  "id": "spellbloc-pwa"
 }
