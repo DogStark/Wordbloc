@@ -46,6 +46,14 @@
     <div id="app">
         <!-- Home Screen -->
         <div id="homeScreen" class="screen active">
+            <!-- User Info & Logout -->
+            <div id="userInfo" class="user-info hidden">
+                <div class="user-welcome">
+                    <span id="welcomeMessage">Welcome back!</span>
+                    <button id="logoutBtn" class="logout-btn">🚪 Logout</button>
+                </div>
+            </div>
+            
             <h1 class="title">🎮 SpellBloc!</h1>
             <p class="subtitle" id="ageTitle">First Letters (Age 2)</p>
             
@@ -248,6 +256,10 @@
 
     <script src="advanced-systems.js"></script>
     <script src="ai-agent.js"></script>
+    <script src="email-service.js"></script>
+    <script src="email-integration.js"></script>
+    <script src="email-setup-ui.js"></script>
+    <script src="auth-manager.js"></script>
     <script src="game.js"></script>
 </body>
 </html>
