@@ -90,16 +90,11 @@
                 try {
                     const userData = JSON.parse(user);
                     if (userData && userData.parentName) {
-                        // User is logged in
-                        content.innerHTML = `
-                            <div class="user-info">
-                                <h3>Welcome back, ${userData.parentName}!</h3>
-                                <p>Ready to continue learning?</p>
-                            </div>
-                            <a href="/game.html" class="btn primary">🎮 Continue Playing</a>
-                            <br>
-                            <button onclick="logout()" class="btn">🚪 Logout</button>
-                        `;
+                        // User is logged in, redirect to game
+                        content.innerHTML = '<div class="loading">Welcome back! Redirecting to game...</div>';
+                        setTimeout(() => {
+                            window.location.href = '/game.html';
+                        }, 1500);
                         return;
                     }
                 } catch (e) {
@@ -107,12 +102,11 @@
                 }
             }
             
-            // User not logged in
-            content.innerHTML = `
-                <a href="/login.html" class="btn primary">🚀 Start Playing Now!</a>
-                <br>
-                <small style="opacity: 0.8;">New to SpellBloc? Sign up is free!</small>
-            `;
+            // User not logged in, redirect to login immediately
+            content.innerHTML = '<div class="loading">Redirecting to login...</div>';
+            setTimeout(() => {
+                window.location.href = '/login.html';
+            }, 500);
         }
         
         function logout() {
