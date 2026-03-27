@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="SpellBloc">
+    <meta name="format-detection" content="telephone=no">
+    <title>SpellBloc - Kids Word Game</title>
+    <link rel="stylesheet" href="styles.css">
+    <!-- PWA Manifest - only load if served via HTTP/HTTPS -->
+    <script>
+        if (window.location.protocol !== 'file:') {
+            const link = document.createElement('link');
+            link.rel = 'manifest';
+            link.href = 'manifest.json';
+            document.head.appendChild(link);
+        }
+    </script>
+    <meta name="theme-color" content="#3b82f6">
+    <meta name="description" content="A world-class spelling game for children aged 2-7 with adaptive learning and multi-language support.">
+    <meta name="keywords" content="spelling, kids, education, learning, phonics, vocabulary">
+    <meta name="author" content="SpellBloc Team">
+    
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://spellbloc.com/">
+    <meta property="og:title" content="SpellBloc - Kids Word Game">
+    <meta property="og:description" content="A world-class spelling game for children aged 2-7 with adaptive learning and multi-language support.">
+    <meta property="og:image" content="/og-image.png">
+    
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary_large_image">
+    <meta property="twitter:url" content="https://spellbloc.com/">
+    <meta property="twitter:title" content="SpellBloc - Kids Word Game">
+    <meta property="twitter:description" content="A world-class spelling game for children aged 2-7 with adaptive learning and multi-language support.">
+    <meta property="twitter:image" content="/twitter-image.png">
+    
+    <!-- Preload critical resources -->
+    <link rel="preload" href="advanced-systems.js" as="script">
+    <link rel="preload" href="game.js" as="script">
+</head>
+<body>
+    <div id="app">
+        <!-- Home Screen -->
+        <div id="homeScreen" class="screen active">
+            <!-- User Info & Logout -->
+            <div id="userInfo" class="user-info hidden">
+                <div class="user-welcome">
+                    <span id="welcomeMessage">Welcome back!</span>
+                    <button id="logoutBtn" class="logout-btn">🚪 Logout</button>
+                </div>
+            </div>
+            
+            <h1 class="title">🎮 SpellBloc!</h1>
+            <p class="subtitle" id="ageTitle">First Letters (Age 2)</p>
+            
+            <!-- Age Selection -->
+            <div class="age-selector">
+                <label>Child's Age:</label>
+                <select id="ageSelect">
+                    <option value="2">Age 2 - First Letters</option>
+                    <option value="3">Age 3 - Letter Sounds</option>
+                    <option value="4">Age 4 - First Words</option>
+                    <option value="5">Age 5 - Word Builder</option>
+                    <option value="6">Age 6 - Spelling Master</option>
+                    <option value="7">Age 7 - Reading Ready</option>
+                </select>
+            </div>
+            
+            <!-- Game Mode Selection -->
+            <div class="mode-selector">
+                <label>Game Mode:</label>
+                <select id="modeSelect">
+                    <option value="classic">Classic Mode</option>
+                    <option value="story">Story Adventure</option>
+                    <option value="timed">Speed Challenge</option>
+                    <option value="puzzle">Word Puzzles</option>
+                </select>
+            </div>
+            
+            <!-- Language Selection -->
+            <div class="language-selector">
+                <label>Language:</label>
+                <select id="languageSelect">
+                    <option value="en">English</option>
+                    <option value="es">Español</option>
+                    <option value="fr">Français</option>
+                    <option value="de">Deutsch</option>
+                    <option value="zh">中文</option>
+                </select>
+            </div>
+            
+            <div class="categories" id="categoriesContainer">
+                <!-- Categories will be populated by JavaScript -->
+            </div>
+            
+            <div class="stats">
+                <div class="stat">⭐ Stars: <span id="totalStars">0</span></div>
+                <div class="stat">🏆 Level: <span id="playerLevel">1</span></div>
+                <div class="stat">🎨 Badges: <span id="badgeCount">0</span></div>
+            </div>
+            
+            <!-- Accessibility Panel -->
+            <div class="accessibility-panel">
+                <button id="accessibilityBtn" class="accessibility-btn">♿ Accessibility</button>
+                <div id="accessibilityOptions" class="accessibility-options hidden">
+                    <button id="highContrastBtn">High Contrast</button>
+                    <button id="dyslexiaFontBtn">Dyslexia Font</button>
+                    <button id="largeFontBtn">Large Font</button>
+                    <button id="screenReaderBtn">Screen Reader</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Game Screen -->
+        <div id="gameScreen" class="screen">
+            <div class="game-header">
+                <button id="backBtn" class="icon-btn">🏠</button>
+                <div class="progress-bar">
+                    <div id="progressFill" class="progress-fill"></div>
+                </div>
+                <div class="stars-display">⭐ <span id="currentStars">0</span></div>
+                <div id="timer" class="timer hidden"></div>
+                <div id="difficultyIndicator" class="difficulty-indicator">Level: <span id="difficultyLevel">1.0</span></div>
+            </div>
+
+            <!-- Game Instructions -->
+            <div id="gameInstructions" class="game-instructions">
+                <div class="instruction-content">
+                    <h3 id="instructionTitle">📝 How to Play</h3>
+                    <p id="instructionText">Look at the emoji, listen to the word, then tap the letters below to spell it!</p>
+                    <div class="instruction-example">
+                        <span class="example-emoji">🐱</span>
+                        <span class="example-arrow">→</span>
+                        <span class="example-word">C-A-T</span>
+                    </div>
+                    <button id="startGameBtn" class="start-game-btn">Got It! Let's Play! 🎮</button>
+                </div>
+            </div>
+
+            <div class="game-content">
+                <div id="storyContext" class="story-context hidden"></div>
+                
+                <!-- Current Task Display -->
+                <div id="currentTask" class="current-task">
+                    <p id="taskDescription">Spell the word you hear!</p>
+                </div>
+                
+                <div class="word-display">
+                    <div id="wordImage" class="word-image"></div>
+                    <button id="playSound" class="sound-btn" data-translate="hear_word">🔊 Hear Word</button>
+                    <div id="phonicsDisplay" class="phonics-display hidden"></div>
+                </div>
+
+                <div id="dropZone" class="drop-zone"></div>
+                
+                <div class="action-buttons">
+                    <button id="deleteBtn" class="action-btn" data-translate="delete">⌫ Delete</button>
+                    <button id="clearBtn" class="action-btn" data-translate="clear">✖ Clear</button>
+                    <button id="hintBtn" class="action-btn">💡 Hint</button>
+                    <button id="helpBtn" class="action-btn">❓ Help</button>
+                </div>
+                
+                <div id="letterBank" class="letter-bank"></div>
+
+                <div id="feedback" class="feedback"></div>
+                
+                <!-- AI Enhancements -->
+                <div class="ai-hints hidden" id="aiHint"></div>
+                <div class="ai-encouragement" id="aiEncouragement"></div>
+            </div>
+        </div>
+
+        <!-- Victory Screen -->
+        <div id="victoryScreen" class="screen">
+            <div class="victory-content">
+                <h2 class="victory-title">🎉 Round Complete!</h2>
+                <div class="victory-stars" id="victoryStars"></div>
+                <p class="victory-text">You earned <span id="earnedStars">0</span> stars this round!</p>
+                <div class="victory-buttons">
+                    <button id="nextLevelBtn" class="big-btn">Next Stage ➡️</button>
+                    <button id="homeBtn" class="big-btn secondary">Home 🏠</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Parent Dashboard Screen -->
+        <div id="dashboardScreen" class="screen">
+            <div class="dashboard-header">
+                <h2>Parent Dashboard</h2>
+                <button id="dashboardBackBtn" class="icon-btn">🏠</button>
+            </div>
+            
+            <div class="dashboard-content">
+                <div class="dashboard-section">
+                    <h3>Progress Overview</h3>
+                    <div id="progressChart" class="progress-chart"></div>
+                    <div id="progressStats" class="progress-stats"></div>
+                </div>
+                
+                <div class="dashboard-section">
+                    <h3>Recent Achievements</h3>
+                    <div id="recentAchievements" class="achievements-list"></div>
+                </div>
+                
+                <div class="dashboard-section">
+                    <h3>Recommendations</h3>
+                    <div id="recommendations" class="recommendations-list"></div>
+                </div>
+                
+                <div class="dashboard-section">
+                    <h3>Custom Word Lists</h3>
+                    <div class="custom-words-controls">
+                        <input type="text" id="customWordInput" placeholder="Enter words separated by commas">
+                        <button id="addCustomWordsBtn">Add Words</button>
+                    </div>
+                    <div id="customWordsList" class="custom-words-list"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Settings Panel -->
+        <button id="settingsBtn" class="settings-btn">⚙️</button>
+        <button id="parentDashboardBtn" class="parent-dashboard-btn">📈</button>
+        <div id="settingsPanel" class="settings-panel">
+            <h3>Settings</h3>
+            <div class="settings-section">
+                <label>
+                    Volume: <input type="range" id="volumeControl" min="0" max="100" value="70">
+                </label>
+            </div>
+            
+            <div class="settings-section">
+                <h4>Subscription</h4>
+                <div id="subscriptionStatus" class="subscription-status">Free Plan</div>
+                <button id="upgradeBtn" class="upgrade-btn">Upgrade to Premium</button>
+            </div>
+            
+            <div class="settings-section">
+                <h4>Performance</h4>
+                <div id="performanceMetrics" class="performance-metrics">
+                    <div>FPS: <span id="fpsDisplay">60</span></div>
+                    <div>Memory: <span id="memoryDisplay">0</span>MB</div>
+                </div>
+                <button id="optimizeBtn">Optimize Performance</button>
+            </div>
+            
+            <button id="closeSettings" class="big-btn">Close</button>
+        </div>
+    </div>
+
+    <footer class="footer">spellblocs by llins</footer>
+
+    <script src="advanced-systems.js"></script>
+    <script src="ai-agent.js"></script>
+    <script src="email-service.js"></script>
+    <script src="email-integration.js"></script>
+    <script src="email-setup-ui.js"></script>
+    <script src="auth-manager.js"></script>
+    <script src="game.js"></script>
+    
+    <!-- Authentication Check -->
+    <script>
+        // Check if user is logged in
+        const user = localStorage.getItem('spellbloc_user');
+        if (!user) {
+            // Redirect to login page if not authenticated
+            window.location.href = '/login.html';
+        } else {
+            // Show user info if logged in
+            const userData = JSON.parse(user);
+            const userInfo = document.getElementById('userInfo');
+            const welcomeMessage = document.getElementById('welcomeMessage');
+            if (userInfo && welcomeMessage) {
+                welcomeMessage.textContent = `Welcome back, ${userData.parentName || 'Parent'}!`;
+                userInfo.classList.remove('hidden');
+            }
+        }
+        
+        // Logout functionality
+        document.getElementById('logoutBtn')?.addEventListener('click', () => {
+            localStorage.removeItem('spellbloc_user');
+            window.location.href = '/login.html';
+        });
+    </script>
+</body>
+</html>
