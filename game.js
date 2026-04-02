@@ -543,6 +543,7 @@ class AccessibilityManager {
 const adaptiveLearning = new AdaptiveLearningEngine();
 const gameModeManager = new GameModeManager();
 const accessibilityManager = new AccessibilityManager();
+const spellBlocPayments = useSpellBlocPayments(); // MiniPay integration
 
 // Load analytics on startup
 adaptiveLearning.analytics.loadAnalytics();
