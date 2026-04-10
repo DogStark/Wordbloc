@@ -26,14 +26,14 @@
     
     <!-- Open Graph / Facebook -->
     <meta property="og:type" content="website">
-    <meta property="og:url" content="https://spellbloc.com/">
+    <meta property="og:url" content="https://wordbloc.xyz/">
     <meta property="og:title" content="SpellBloc - Kids Word Game">
     <meta property="og:description" content="A world-class spelling game for children aged 2-7 with adaptive learning and multi-language support.">
     <meta property="og:image" content="/og-image.png">
     
     <!-- Twitter -->
     <meta property="twitter:card" content="summary_large_image">
-    <meta property="twitter:url" content="https://spellbloc.com/">
+    <meta property="twitter:url" content="https://wordbloc.xyz/">
     <meta property="twitter:title" content="SpellBloc - Kids Word Game">
     <meta property="twitter:description" content="A world-class spelling game for children aged 2-7 with adaptive learning and multi-language support.">
     <meta property="twitter:image" content="/twitter-image.png">
@@ -267,26 +267,50 @@
     <!-- Authentication Check -->
     <script>
         // Check if user is logged in
-        const user = localStorage.getItem('spellbloc_user');
-        if (!user) {
-            // Redirect to login page if not authenticated
-            window.location.href = '/login.html';
-        } else {
-            // Show user info if logged in
-            const userData = JSON.parse(user);
-            const userInfo = document.getElementById('userInfo');
-            const welcomeMessage = document.getElementById('welcomeMessage');
-            if (userInfo && welcomeMessage) {
-                welcomeMessage.textContent = `Welcome back, ${userData.parentName || 'Parent'}!`;
-                userInfo.classList.remove('hidden');
+        function checkAuth() {
+            const user = localStorage.getItem('spellbloc_user');
+            if (!user || user === 'null' || user === 'undefined') {
+                // Redirect to login page if not authenticated
+                window.location.href = '/login.html';
+                return false;
+            }
+            
+            try {
+                const userData = JSON.parse(user);
+                if (!userData || !userData.parentName || !userData.childName) {
+                    // Invalid user data, redirect to login
+                    localStorage.removeItem('spellbloc_user');
+                    window.location.href = '/login.html';
+                    return false;
+                }
+                
+                // Show user info if logged in
+                const userInfo = document.getElementById('userInfo');
+                const welcomeMessage = document.getElementById('welcomeMessage');
+                if (userInfo && welcomeMessage) {
+                    welcomeMessage.textContent = `Welcome ${userData.childName}! (Parent: ${userData.parentName})`;
+                    userInfo.classList.remove('hidden');
+                }
+                
+                return true;
+            } catch (e) {
+                // Invalid JSON, clear and redirect
+                localStorage.removeItem('spellbloc_user');
+                window.location.href = '/login.html';
+                return false;
             }
         }
         
         // Logout functionality
         document.getElementById('logoutBtn')?.addEventListener('click', () => {
-            localStorage.removeItem('spellbloc_user');
-            window.location.href = '/login.html';
+            if (confirm('Are you sure you want to logout?')) {
+                localStorage.removeItem('spellbloc_user');
+                window.location.href = '/login.html';
+            }
         });
+        
+        // Run auth check
+        checkAuth();
     </script>
 </body>
 </html>

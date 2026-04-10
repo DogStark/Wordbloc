@@ -89,9 +89,9 @@
             if (user && user !== 'null' && user !== 'undefined') {
                 try {
                     const userData = JSON.parse(user);
-                    if (userData && userData.parentName) {
+                    if (userData && userData.parentName && userData.childName) {
                         // User is logged in, redirect to game
-                        content.innerHTML = '<div class="loading">Welcome back! Redirecting to game...</div>';
+                        content.innerHTML = `<div class="loading">Welcome back ${userData.childName}! Loading your game...</div>`;
                         setTimeout(() => {
                             window.location.href = '/game.html';
                         }, 1500);
@@ -103,15 +103,10 @@
             }
             
             // User not logged in, redirect to login immediately
-            content.innerHTML = '<div class="loading">Redirecting to login...</div>';
+            content.innerHTML = '<div class="loading">Setting up your learning adventure...</div>';
             setTimeout(() => {
                 window.location.href = '/login.html';
-            }, 500);
-        }
-        
-        function logout() {
-            localStorage.removeItem('spellbloc_user');
-            checkAuth();
+            }, 800);
         }
         
         // Run auth check when page loads

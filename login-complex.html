@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SpellBloc - Login & Signup</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .auth-container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+            max-width: 900px;
+            width: 100%;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            min-height: 600px;
+        }
+
+        .auth-left {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 60px 40px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            text-align: center;
+        }
+
+        .auth-right {
+            padding: 60px 40px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        .logo {
+            font-size: 3em;
+            margin-bottom: 20px;
+        }
+
+        .auth-left h1 {
+            font-size: 2.5em;
+            margin-bottom: 20px;
+            font-weight: 700;
+        }
+
+        .auth-left p {
+            font-size: 1.2em;
+            opacity: 0.9;
+            line-height: 1.6;
+        }
+
+        .features {
+            margin-top: 40px;
+            display: grid;
+            gap: 20px;
+        }
+
+        .feature {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            font-size: 1.1em;
+        }
+
+        .feature-icon {
+            font-size: 1.5em;
+        }
+
+        .auth-form {
+            width: 100%;
+        }
+
+        .form-toggle {
+            display: flex;
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 5px;
+            margin-bottom: 40px;
+        }
+
+        .toggle-btn {
+            flex: 1;
+            padding: 15px;
+            border: none;
+            background: transparent;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .toggle-btn.active {
+            background: white;
+            color: #667eea;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .form-group {
+            margin-bottom: 25px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 15px;
+            border: 2px solid #e9ecef;
+            border-radius: 10px;
+            font-size: 16px;
+            transition: border-color 0.3s ease;
+        }
+
+        .form-group input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .form-group input.error {
+            border-color: #dc3545;
+        }
+
+        .error-message {
+            color: #dc3545;
+            font-size: 14px;
+            margin-top: 5px;
+        }
+
+        .success-message {
+            color: #28a745;
+            font-size: 14px;
+            margin-top: 5px;
+        }
+
+        .submit-btn {
+            width: 100%;
+            padding: 15px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s ease;
+        }
+
+        .submit-btn:hover {
+            transform: translateY(-2px);
+        }
+
+        .submit-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 2px solid #ffffff;
+            border-radius: 50%;
+            border-top-color: transparent;
+            animation: spin 1s ease-in-out infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .child-info {
+            display: none;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+
+        .child-info.show {
+            display: grid;
+        }
+
+        .age-selector {
+            margin-bottom: 25px;
+        }
+
+        .age-selector select {
+            width: 100%;
+            padding: 15px;
+            border: 2px solid #e9ecef;
+            border-radius: 10px;
+            font-size: 16px;
+            background: white;
+        }
+
+        .privacy-notice {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+            margin-top: 20px;
+            font-size: 14px;
+            color: #666;
+        }
+
+        .privacy-notice h4 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+
+        @media (max-width: 768px) {
+            .auth-container {
+                grid-template-columns: 1fr;
+                max-width: 500px;
+            }
+
+            .auth-left {
+                padding: 40px 30px;
+            }
+
+            .auth-right {
+                padding: 40px 30px;
+            }
+
+            .auth-left h1 {
+                font-size: 2em;
+            }
+
+            .child-info {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 15px 20px;
+            border-radius: 10px;
+            color: white;
+            font-weight: 600;
+            z-index: 1000;
+            transform: translateX(400px);
+            transition: transform 0.3s ease;
+        }
+
+        .notification.show {
+            transform: translateX(0);
+        }
+
+        .notification.success {
+            background: #28a745;
+        }
+
+        .notification.error {
+            background: #dc3545;
+        }
+    </style>
+</head>
+<body>
+    <div class="auth-container">
+        <div class="auth-left">
+            <div class="logo">🎮</div>
+            <h1>SpellBloc</h1>
+            <p>Where learning spelling becomes an exciting adventure for kids aged 2-7!</p>
+            
+            <div class="features">
+                <div class="feature">
+                    <span class="feature-icon">🎯</span>
+                    <span>AI-powered personalized learning</span>
+                </div>
+                <div class="feature">
+                    <span class="feature-icon">🏆</span>
+                    <span>Achievement badges & rewards</span>
+                </div>
+                <div class="feature">
+                    <span class="feature-icon">📊</span>
+                    <span>Progress tracking & reports</span>
+                </div>
+                <div class="feature">
+                    <span class="feature-icon">🌍</span>
+                    <span>Multi-language support</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="auth-right">
+            <div class="form-toggle">
+                <button class="toggle-btn active" id="loginToggle">Login</button>
+                <button class="toggle-btn" id="signupToggle">Sign Up</button>
+            </div>
+
+            <!-- Login Form -->
+            <form class="auth-form" id="loginForm">
+                <div class="form-group">
+                    <label for="loginEmail">Email Address</label>
+                    <input type="email" id="loginEmail" required>
+                    <div class="error-message" id="loginEmailError"></div>
+                </div>
+
+                <div class="form-group">
+                    <label for="loginPassword">Password</label>
+                    <input type="password" id="loginPassword" required>
+                    <div class="error-message" id="loginPasswordError"></div>
+                </div>
+
+                <button type="submit" class="submit-btn" id="loginBtn">
+                    <span class="btn-text">Login to SpellBloc</span>
+                </button>
+            </form>
+
+            <!-- Signup Form -->
+            <form class="auth-form" id="signupForm" style="display: none;">
+                <div class="form-group">
+                    <label for="parentName">Parent/Guardian Name</label>
+                    <input type="text" id="parentName" required>
+                    <div class="error-message" id="parentNameError"></div>
+                </div>
+
+                <div class="form-group">
+                    <label for="parentEmail">Email Address</label>
+                    <input type="email" id="parentEmail" required>
+                    <div class="error-message" id="parentEmailError"></div>
+                </div>
+
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" required minlength="6">
+                    <div class="error-message" id="passwordError"></div>
+                </div>
+
+                <div class="form-group">
+                    <label for="confirmPassword">Confirm Password</label>
+                    <input type="password" id="confirmPassword" required>
+                    <div class="error-message" id="confirmPasswordError"></div>
+                </div>
+
+                <div class="child-info" id="childInfo">
+                    <div class="form-group">
+                        <label for="childName">Child's Name</label>
+                        <input type="text" id="childName" required>
+                        <div class="error-message" id="childNameError"></div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="childAge">Child's Age</label>
+                        <select id="childAge" required>
+                            <option value="">Select Age</option>
+                            <option value="2">2 years old</option>
+                            <option value="3">3 years old</option>
+                            <option value="4">4 years old</option>
+                            <option value="5">5 years old</option>
+                            <option value="6">6 years old</option>
+                            <option value="7">7 years old</option>
+                        </select>
+                        <div class="error-message" id="childAgeError"></div>
+                    </div>
+                </div>
+
+                <button type="submit" class="submit-btn" id="signupBtn">
+                    <span class="btn-text">Create SpellBloc Account</span>
+                </button>
+
+                <div class="privacy-notice">
+                    <h4>🔒 Privacy & Safety</h4>
+                    <p>We're COPPA compliant and prioritize your child's safety. Your email will only be used for learning progress updates and account management.</p>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // Form toggle functionality
+        const loginToggle = document.getElementById('loginToggle');
+        const signupToggle = document.getElementById('signupToggle');
+        const loginForm = document.getElementById('loginForm');
+        const signupForm = document.getElementById('signupForm');
+        const childInfo = document.getElementById('childInfo');
+
+        loginToggle.addEventListener('click', () => {
+            loginToggle.classList.add('active');
+            signupToggle.classList.remove('active');
+            loginForm.style.display = 'block';
+            signupForm.style.display = 'none';
+        });
+
+        signupToggle.addEventListener('click', () => {
+            signupToggle.classList.add('active');
+            loginToggle.classList.remove('active');
+            loginForm.style.display = 'none';
+            signupForm.style.display = 'block';
+            childInfo.classList.add('show');
+        });
+
+        // Form validation
+        function validateEmail(email) {
+            const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            return re.test(email);
+        }
+
+        function showError(fieldId, message) {
+            const errorElement = document.getElementById(fieldId + 'Error');
+            const inputElement = document.getElementById(fieldId);
+            errorElement.textContent = message;
+            inputElement.classList.add('error');
+        }
+
+        function clearError(fieldId) {
+            const errorElement = document.getElementById(fieldId + 'Error');
+            const inputElement = document.getElementById(fieldId);
+            errorElement.textContent = '';
+            inputElement.classList.remove('error');
+        }
+
+        function showNotification(message, type = 'success') {
+            const notification = document.createElement('div');
+            notification.className = `notification ${type}`;
+            notification.textContent = message;
+            document.body.appendChild(notification);
+            
+            setTimeout(() => notification.classList.add('show'), 100);
+            setTimeout(() => {
+                notification.classList.remove('show');
+                setTimeout(() => notification.remove(), 300);
+            }, 4000);
+        }
+
+        function setLoading(buttonId, loading) {
+            const button = document.getElementById(buttonId);
+            const btnText = button.querySelector('.btn-text');
+            
+            if (loading) {
+                button.disabled = true;
+                btnText.innerHTML = '<span class="loading"></span> Processing...';
+            } else {
+                button.disabled = false;
+                btnText.textContent = buttonId === 'loginBtn' ? 'Login to SpellBloc' : 'Create SpellBloc Account';
+            }
+        }
+
+        // Login form submission
+        loginForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const email = document.getElementById('loginEmail').value;
+            const password = document.getElementById('loginPassword').value;
+            
+            // Clear previous errors
+            clearError('loginEmail');
+            clearError('loginPassword');
+            
+            // Validate
+            let hasErrors = false;
+            
+            if (!validateEmail(email)) {
+                showError('loginEmail', 'Please enter a valid email address');
+                hasErrors = true;
+            }
+            
+            if (password.length < 6) {
+                showError('loginPassword', 'Password must be at least 6 characters');
+                hasErrors = true;
+            }
+            
+            if (hasErrors) return;
+            
+            setLoading('loginBtn', true);
+            
+            try {
+                const response = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ email, password })
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    showNotification('Login successful! Redirecting...', 'success');
+                    localStorage.setItem('spellbloc_user', JSON.stringify(result.user));
+                    setTimeout(() => {
+                        window.location.href = '/';
+                    }, 2000);
+                } else {
+                    showNotification(result.message || 'Login failed', 'error');
+                }
+            } catch (error) {
+                showNotification('Network error. Please try again.', 'error');
+            } finally {
+                setLoading('loginBtn', false);
+            }
+        });
+
+        // Signup form submission
+        signupForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const parentName = document.getElementById('parentName').value;
+            const parentEmail = document.getElementById('parentEmail').value;
+            const password = document.getElementById('password').value;
+            const confirmPassword = document.getElementById('confirmPassword').value;
+            const childName = document.getElementById('childName').value;
+            const childAge = document.getElementById('childAge').value;
+            
+            // Clear previous errors
+            ['parentName', 'parentEmail', 'password', 'confirmPassword', 'childName', 'childAge'].forEach(clearError);
+            
+            // Validate
+            let hasErrors = false;
+            
+            if (parentName.length < 2) {
+                showError('parentName', 'Please enter your full name');
+                hasErrors = true;
+            }
+            
+            if (!validateEmail(parentEmail)) {
+                showError('parentEmail', 'Please enter a valid email address');
+                hasErrors = true;
+            }
+            
+            if (password.length < 6) {
+                showError('password', 'Password must be at least 6 characters');
+                hasErrors = true;
+            }
+            
+            if (password !== confirmPassword) {
+                showError('confirmPassword', 'Passwords do not match');
+                hasErrors = true;
+            }
+            
+            if (childName.length < 2) {
+                showError('childName', 'Please enter your child\'s name');
+                hasErrors = true;
+            }
+            
+            if (!childAge) {
+                showError('childAge', 'Please select your child\'s age');
+                hasErrors = true;
+            }
+            
+            if (hasErrors) return;
+            
+            setLoading('signupBtn', true);
+            
+            try {
+                const response = await fetch('/api/auth/signup', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        parentName,
+                        parentEmail,
+                        password,
+                        childName,
+                        childAge: parseInt(childAge)
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    showNotification('Account created successfully! Check your email for welcome message.', 'success');
+                    localStorage.setItem('spellbloc_user', JSON.stringify(result.user));
+                    setTimeout(() => {
+                        window.location.href = '/';
+                    }, 3000);
+                } else {
+                    showNotification(result.message || 'Signup failed', 'error');
+                }
+            } catch (error) {
+                showNotification('Network error. Please try again.', 'error');
+            } finally {
+                setLoading('signupBtn', false);
+            }
+        });
+
+        // Real-time validation
+        document.getElementById('parentEmail').addEventListener('blur', function() {
+            if (this.value && !validateEmail(this.value)) {
+                showError('parentEmail', 'Please enter a valid email address');
+            } else {
+                clearError('parentEmail');
+            }
+        });
+
+        document.getElementById('confirmPassword').addEventListener('input', function() {
+            const password = document.getElementById('password').value;
+            if (this.value && this.value !== password) {
+                showError('confirmPassword', 'Passwords do not match');
+            } else {
+                clearError('confirmPassword');
+            }
+        });
+    </script>
+</body>
+</html>
