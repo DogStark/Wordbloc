@@ -119,6 +119,17 @@ model WordMastery {
   lastSeen              DateTime  @default(now())
   nextReview            DateTime?
   difficultyRating      Float     @default(1.0)
+  
+  // SM-2 Spaced Repetition fields
+  srsInterval           Int       @default(0)        // Current interval in days
+  srsEaseFactor         Float     @default(2.5)      // SM-2 ease factor (default 2.5)
+  srsRepetitions        Int       @default(0)        // Number of successful repetitions
+  srsQuality            Int?                         // Last quality grade (0-5)
+  srsStatus             String    @default("new")    // new, learning, review, mastered
+  
+  // Response time tracking for difficulty estimation
+  averageResponseTime   Float?                        // in seconds
+  responseTimeSamples   Int       @default(0)        // number of samples
 
   // Relations
   child                 Child     @relation(fields: [childId], references: [id], onDelete: Cascade)

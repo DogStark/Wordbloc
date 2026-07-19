@@ -1,63 +1,95 @@
-// Advanced Learning System
+// Advanced Learning System - Now powered by SM-2 Spaced Repetition
+// This class is now a thin wrapper around the SRSEngine for backward compatibility
 class AdaptiveLearningEngine {
     constructor() {
-        this.difficultyLevel = 1.0; // 0.5 = easier, 2.0 = harder
-        this.performanceHistory = [];
-        this.spacedRepetition = new Map();
+        this.srsEngine = new SRSEngine();
         this.analytics = new LearningAnalytics();
+        this.childId = null;
     }
 
-    adjustDifficulty(isCorrect, timeToComplete) {
+    initialize(childId) {
+        this.childId = childId;
+        this.srsEngine.initialize(childId);
+    }
+
+    /**
+     * Record a word attempt with quality grading
+     * Quality is determined by correctness and response time
+     */
+    recordAttempt(word, category, isCorrect, responseTimeMs) {
+        // Determine quality grade (0-5)
+        let quality;
+        if (!isCorrect) {
+            quality = 0; // Complete failure
+        } else if (responseTimeMs < 3000) {
+            quality = 5; // Perfect (correct + fast)
+        } else if (responseTimeMs < 5000) {
+            quality = 4; // Correct with slight hesitation
+        } else if (responseTimeMs < 10000) {
+            quality = 3; // Correct but difficult
+        } else {
+            quality = 2; // Correct but very slow
+        }
+
+        // Record in SRS engine
+        const wordId = word; // Use word as ID for simplicity
+        const state = this.srsEngine.recordResponse(wordId, word, category, quality, responseTimeMs);
+        
+        // Record in analytics
         const performance = {
             correct: isCorrect,
-            time: timeToComplete,
-            timestamp: Date.now()
+            time: responseTimeMs,
+            timestamp: Date.now(),
+            category: category,
+            word: word
         };
-        
-        this.performanceHistory.push(performance);
-        
-        // Keep only last 10 attempts for calculation
-        if (this.performanceHistory.length > 10) {
-            this.performanceHistory.shift();
-        }
-        
-        const recentCorrect = this.performanceHistory.filter(p => p.correct).length;
-        const accuracy = recentCorrect / this.performanceHistory.length;
-        
-        // Adjust difficulty based on performance
-        if (accuracy > 0.8 && this.difficultyLevel < 2.0) {
-            this.difficultyLevel += 0.1;
-        } else if (accuracy < 0.6 && this.difficultyLevel > 0.5) {
-            this.difficultyLevel -= 0.1;
-        }
-        
         this.analytics.recordAttempt(performance);
-    }
-
-    scheduleSpacedRepetition(word, difficulty) {
-        const now = Date.now();
-        const intervals = [1, 3, 7, 14, 30]; // days
-        const currentInterval = this.spacedRepetition.get(word)?.interval || 0;
-        const nextInterval = intervals[Math.min(currentInterval + 1, intervals.length - 1)];
         
-        this.spacedRepetition.set(word, {
-            nextReview: now + (nextInterval * 24 * 60 * 60 * 1000),
-            interval: currentInterval + 1,
-            difficulty: difficulty
-        });
+        return state;
     }
 
+    /**
+     * Build session word queue driven by mastery model
+     */
+    getSessionQueue(allWords, category = null, ageBand = null) {
+        return this.srsEngine.buildSessionQueue(allWords, category, ageBand, 10);
+    }
+
+    /**
+     * Get words due for review
+     */
     getWordsForReview() {
-        const now = Date.now();
-        const wordsToReview = [];
-        
-        for (const [word, data] of this.spacedRepetition) {
-            if (data.nextReview <= now) {
-                wordsToReview.push(word);
-            }
-        }
-        
-        return wordsToReview;
+        const dueReviews = this.srsEngine.getDueReviews();
+        return dueReviews.map(state => state.word);
+    }
+
+    /**
+     * Get mastery report for dashboard
+     */
+    getMasteryReport() {
+        return this.srsEngine.getMasteryReport();
+    }
+
+    /**
+     * Calculate word difficulty (combines population data + child history)
+     */
+    getWordDifficulty(word) {
+        return this.srsEngine.calculateWordDifficulty(word);
+    }
+
+    /**
+     * Legacy method for backward compatibility - now uses SRS data
+     */
+    adjustDifficulty(isCorrect, timeToComplete) {
+        // This is now handled by recordAttempt with quality grading
+        console.warn('adjustDifficulty is deprecated, use recordAttempt instead');
+    }
+
+    /**
+     * Legacy method for backward compatibility
+     */
+    scheduleSpacedRepetition(word, difficulty) {
+        console.warn('scheduleSpacedRepetition is deprecated, use recordAttempt instead');
     }
 }
 

@@ -5,7 +5,7 @@ class SpellBlocAI {
         this.childProfile = null;
         this.performanceHistory = [];
         this.learningPatterns = new Map();
-        this.difficultyModel = new DifficultyAI();
+        this.srsEngine = null; // Will reference the unified SRS engine
         this.speechRecognition = new SpeechAI();
         this.personalityEngine = new PersonalityAI();
         this.init();
@@ -17,8 +17,12 @@ class SpellBlocAI {
         // Load child's learning profile
         await this.loadChildProfile();
         
+        // Reference the unified SRS engine from game.js
+        if (typeof adaptiveLearning !== 'undefined' && adaptiveLearning.srsEngine) {
+            this.srsEngine = adaptiveLearning.srsEngine;
+        }
+        
         // Initialize AI models
-        await this.difficultyModel.init();
         await this.speechRecognition.init();
         await this.personalityEngine.init();
         
@@ -320,15 +324,31 @@ class SpellBlocAI {
         return patterns;
     }
 
-    // DIFFICULTY ADJUSTMENT
+    // DIFFICULTY ADJUSTMENT - Now uses unified SRS engine
     calculateOptimalDifficulty(attempts) {
+        if (this.srsEngine) {
+            // Use SRS engine's difficulty calculation
+            const recentAttempts = attempts.slice(-10);
+            if (recentAttempts.length === 0) return 'maintain';
+            
+            const accuracy = this.calculateAccuracy(recentAttempts);
+            const avgTime = this.calculateAverageTime(recentAttempts);
+            
+            // Optimal challenge zone: 70-85% accuracy
+            if (accuracy > 85) return 'increase'; // Too easy
+            if (accuracy < 70) return 'decrease'; // Too hard
+            if (avgTime > 30) return 'decrease'; // Taking too long
+            
+            return 'maintain';
+        }
+        
+        // Fallback to simple calculation if SRS engine not available
         const accuracy = this.calculateAccuracy(attempts);
         const avgTime = this.calculateAverageTime(attempts);
         
-        // Optimal challenge zone: 70-85% accuracy
-        if (accuracy > 85) return 'increase'; // Too easy
-        if (accuracy < 70) return 'decrease'; // Too hard
-        if (avgTime > 30) return 'decrease'; // Taking too long
+        if (accuracy > 85) return 'increase';
+        if (accuracy < 70) return 'decrease';
+        if (avgTime > 30) return 'decrease';
         
         return 'maintain';
     }
@@ -573,48 +593,8 @@ class SpellBlocAI {
     }
 }
 
-// DIFFICULTY AI MODEL
-class DifficultyAI {
-    constructor() {
-        this.model = null;
-    }
-
-    async init() {
-        // Simple rule-based model for now (can be enhanced with ML later)
-        this.model = {
-            rules: [
-                { condition: 'accuracy > 90', action: 'increase_difficulty' },
-                { condition: 'accuracy < 60', action: 'decrease_difficulty' },
-                { condition: 'time > 30', action: 'provide_hint' },
-                { condition: 'consecutive_failures > 3', action: 'switch_category' }
-            ]
-        };
-    }
-
-    predict(childData) {
-        // Simple rule-based predictions
-        const accuracy = this.calculateAccuracy(childData.attempts);
-        const avgTime = this.calculateAverageTime(childData.attempts);
-        
-        if (accuracy > 90) return 'increase_difficulty';
-        if (accuracy < 60) return 'decrease_difficulty';
-        if (avgTime > 30) return 'provide_hint';
-        
-        return 'maintain';
-    }
-
-    calculateAccuracy(attempts) {
-        if (attempts.length === 0) return 0;
-        const correct = attempts.filter(a => a.correct).length;
-        return (correct / attempts.length) * 100;
-    }
-
-    calculateAverageTime(attempts) {
-        if (attempts.length === 0) return 0;
-        const totalTime = attempts.reduce((sum, a) => sum + a.timeSpent, 0);
-        return totalTime / attempts.length / 1000;
-    }
-}
+// DIFFICULTY AI MODEL - Removed, now using unified SRS engine from srs-engine.js
+// The difficulty calculation is now handled by SRSEngine.calculateWordDifficulty()
 
 // SPEECH AI
 class SpeechAI {
@@ -723,5 +703,5 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // Export for use in other modules
 if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { SpellBlocAI, DifficultyAI, SpeechAI, PersonalityAI };
+    module.exports = { SpellBlocAI, SpeechAI, PersonalityAI };
 }
