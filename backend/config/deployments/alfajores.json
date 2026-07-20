@@ -1,0 +1,18 @@
+{
+  "network": "alfajores",
+  "chainId": 44787,
+  "rpcUrl": "https://alfajores-forno.celo-testnet.org",
+  "explorerBaseUrl": "https://alfajores.celoscan.io",
+  "contracts": {
+    "achievements": {
+      "address": "",
+      "deployTxHash": "",
+      "deployedAt": ""
+    },
+    "certificates": {
+      "address": "",
+      "deployTxHash": "",
+      "deployedAt": ""
+    }
+  }
+}

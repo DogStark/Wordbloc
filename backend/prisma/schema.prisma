@@ -147,6 +147,7 @@ model AchievementType {
   requirementValue      Int
   badgeImageUrl         String?
   nftMetadataUri        String?
+  onChainId             Int?      // maps to the on-chain achievement template id in SpellBlocAchievements
   rarity                Rarity    @default(COMMON)
   isActive              Boolean   @default(true)
   createdAt             DateTime  @default(now())
@@ -336,6 +337,30 @@ model IpfsContent {
   @@map("ipfs_content")
 }
 
+// Durable, DB-backed queue for asynchronous NFT minting so gameplay is never
+// blocked. One row per (child, on-chain achievement); the unique dedupeKey
+// guarantees a milestone can never mint twice.
+model MintJob {
+  id                    String        @id @default(cuid())
+  dedupeKey             String        @unique
+  childId               String
+  achievementId         Int           // on-chain achievement template id
+  achievementDbId       String?       // Achievement row id, for reconciliation
+  status                MintJobStatus @default(QUEUED)
+  attempts              Int           @default(0)
+  maxAttempts           Int           @default(5)
+  nextAttemptAt         DateTime      @default(now())
+  lastError             String?
+  transactionHash       String?
+  tokenId               BigInt?
+  tokenUri              String?
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+
+  @@index([status, nextAttemptAt])
+  @@map("mint_jobs")
+}
+
 model SystemConfig {
   id                    String    @id @default(cuid())
   configKey             String    @unique
@@ -370,6 +395,13 @@ enum Rarity {
 
 enum TransactionStatus {
   PENDING
+  CONFIRMED
+  FAILED
+}
+
+enum MintJobStatus {
+  QUEUED
+  PROCESSING
   CONFIRMED
   FAILED
 }
