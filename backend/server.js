@@ -14,6 +14,7 @@ require('dotenv').config();
 
 // Import routes
 const authRoutes = require('./routes/auth');
+const { router: paymentRoutes } = require('./routes/payments');
 const gameRoutes = require('./routes/game');
 const achievementRoutes = require('./routes/achievements');
 const certificateRoutes = require('./routes/certificates');
@@ -221,6 +222,7 @@ app.get('/health', async (req, res) => {
 
 // API routes
 app.use('/api/auth', authRoutes);
+app.use('/api/payments', paymentRoutes);
 app.use('/api/game', authMiddleware.authenticate, gameRoutes);
 app.use('/api/achievements', authMiddleware.authenticate, achievementRoutes);
 app.use('/api/certificates', authMiddleware.authenticate, certificateRoutes);

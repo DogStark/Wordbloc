@@ -29,6 +29,7 @@ model User {
   // Relations
   children              Child[]
   wallet                Wallet?
+  paymentWallet         PaymentWallet?
   classrooms            Classroom[]
   wordLists             WordList[]
 
@@ -372,4 +373,14 @@ enum TransactionStatus {
   PENDING
   CONFIRMED
   FAILED
+}
+
+model PaymentWallet {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  address   String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@map("payment_wallets")
 }
