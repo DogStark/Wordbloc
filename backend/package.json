@@ -11,6 +11,7 @@
     "migrate": "npx prisma migrate dev",
     "generate": "npx prisma generate",
     "seed": "node scripts/seed.js",
+    "migrate:legacy-users": "node scripts/migrate-data.js",
     "deploy:contracts": "node scripts/deploy-contracts.js",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix"
