@@ -1594,7 +1594,7 @@ let playerLevel = parseInt(localStorage.getItem('spellbloc_playerLevel')) || 1;
 let volume = 0.7;
 let startTime = 0;
 let currentLanguage = 'en';
-let subscriptionType = 'free'; // free, premium, school
+let subscriptionType = 'free'; // Entitlement comes from the authenticated server session.
 
 // Advanced features
 const rewardSystem = new RewardSystem();
@@ -1663,8 +1663,6 @@ function setupAdvancedFeatures() {
     document.getElementById('modeSelect').value = savedGameMode;
     console.log(`🎮 Loaded game mode: ${savedGameMode}`);
     
-    // Load subscription status
-    updateSubscriptionDisplay();
     
     // Debug: Log available voices for language testing
     if ('speechSynthesis' in window) {
@@ -1694,13 +1692,7 @@ function updatePerformanceDisplay() {
     if (memoryDisplay) memoryDisplay.textContent = metrics.memoryUsage;
 }
 
-function updateSubscriptionDisplay() {
-    const statusElement = document.getElementById('subscriptionStatus');
-    if (statusElement) {
-        statusElement.textContent = subscriptionType === 'premium' ? 'Premium Plan' : 'Free Plan';
-        statusElement.className = `subscription-status ${subscriptionType}`;
-    }
-}
+function updateSubscriptionDisplay() {}
 
 function updateAgeDisplay() {
     const ageData = curriculum[`age${currentAge}`];
@@ -2291,7 +2283,7 @@ function removeCustomWord(word) {
 
 function showHint() {
     if (subscriptionType === 'free') {
-        showUpgradeModal();
+        showParentAccessNotice();
         return;
     }
     
@@ -2305,7 +2297,9 @@ function showHint() {
     }, 3000);
 }
 
-function showUpgradeModal() {
+function showParentAccessNotice() {
+    alert('Ask your parent to enable extra learning tools from their dashboard.');
+    return;
     const modal = document.createElement('div');
     modal.className = 'upgrade-modal';
     modal.innerHTML = `

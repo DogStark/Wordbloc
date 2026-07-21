@@ -7,10 +7,12 @@ const { body, validationResult } = require('express-validator');
 const rateLimit = require('express-rate-limit');
 const { PrismaClient } = require('@prisma/client');
 const walletService = require('../services/walletService');
+const { EntitlementService } = require('../services/entitlementService');
 const winston = require('winston');
 
 const router = express.Router();
 const prisma = new PrismaClient();
+const entitlementService = new EntitlementService({ prisma });
 
 const logger = winston.createLogger({
     level: 'info',
@@ -103,7 +105,7 @@ passport.serializeUser((user, done) => {
 
 passport.deserializeUser(async (id, done) => {
     try {
-        const user = await prisma.user.findUnique({
+        let user = await prisma.user.findUnique({
             where: { id },
             include: {
                 children: true,
@@ -404,7 +406,7 @@ router.get('/me', async (req, res) => {
 
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
         
-        const user = await prisma.user.findUnique({
+        let user = await prisma.user.findUnique({
             where: { id: decoded.userId },
             include: {
                 children: {
@@ -421,6 +423,10 @@ router.get('/me', async (req, res) => {
                 error: 'User not found'
             });
         }
+
+        // Session start is a chain re-check; persisted client values never grant premium.
+        try { await entitlementService.syncUser(user.id); user = await prisma.user.findUnique({ where: { id: user.id }, include: { children: { include: { wallet: true } }, wallet: true } }); }
+        catch (error) { logger.warn(`Entitlement sync skipped: ${error.message}`); }
 
         res.json({
             user: {

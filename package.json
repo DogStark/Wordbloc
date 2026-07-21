@@ -9,6 +9,7 @@
     "coverage": "hardhat coverage",
     "deploy:alfajores": "hardhat run scripts/deploy-celo-mainnet.js --network alfajores",
     "deploy:celo": "hardhat run scripts/deploy-celo-mainnet.js --network celo",
+    "deploy:payments:alfajores": "hardhat run scripts/deploy-payments.js --network alfajores",
     "verify:celo": "hardhat verify --network celo",
     "node": "hardhat node",
     "clean": "hardhat clean",
