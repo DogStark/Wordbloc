@@ -28,8 +28,9 @@ describe("SpellBlocPayments cUSD flow", function () {
   });
 
   it("rejects a purchase with insufficient allowance or cUSD balance", async () => {
-    const { parent, cusd, payments } = await loadFixture(fixture);
+    const { owner, parent, cusd, payments } = await loadFixture(fixture);
     await expect(payments.connect(parent).purchaseSubscription(MONTHLY)).to.be.reverted;
+    await payments.connect(owner).updatePlanPrice(FAMILY, prices[FAMILY] * 3n);
     await cusd.connect(parent).approve(await payments.getAddress(), prices[FAMILY] * 3n);
     await expect(payments.connect(parent).purchaseSubscription(FAMILY)).to.be.reverted;
   });

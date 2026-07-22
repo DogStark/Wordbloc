@@ -1,0 +1,21 @@
+{
+  "users": [
+    {
+      "id": 1,
+      "parentName": "Example Parent",
+      "email": "parent@example.com",
+      "password": "$2a$10$examplebcryptpasswordhashonly",
+      "childName": "Example Child",
+      "childAge": 6,
+      "createdAt": "2026-01-01T00:00:00.000Z",
+      "emailPreferences": {
+        "welcome": true,
+        "achievements": true,
+        "progress": true,
+        "milestones": true,
+        "weekly": true
+      }
+    }
+  ],
+  "counter": 2
+}

@@ -2,14 +2,25 @@ const express = require('express');
 const cors = require('cors');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+require('dotenv').config();
 const path = require('path');
 const fs = require('fs').promises;
 const https = require('https');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
-const JWT_SECRET = 'spellbloc-secret-key-2024'; // In production, use environment variable
+const JWT_SECRET = requireJwtSecret();
+const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
+const USERS_FILE_PATH = process.env.USERS_FILE_PATH || path.join(__dirname, 'users.json');
+
+function requireJwtSecret() {
+    const secret = process.env.JWT_SECRET;
+    if (!secret || !secret.trim()) {
+        throw new Error('JWT_SECRET environment variable is required');
+    }
+    return secret;
+}
 
 // Middleware
 app.use(cors());
@@ -23,7 +34,7 @@ let userIdCounter = 1;
 // Load users from file if exists
 async function loadUsers() {
     try {
-        const data = await fs.readFile('users.json', 'utf8');
+        const data = await fs.readFile(USERS_FILE_PATH, 'utf8');
         const userData = JSON.parse(data);
         users = userData.users || [];
         userIdCounter = userData.counter || 1;
@@ -36,7 +47,7 @@ async function loadUsers() {
 // Save users to file
 async function saveUsers() {
     try {
-        await fs.writeFile('users.json', JSON.stringify({
+        await fs.writeFile(USERS_FILE_PATH, JSON.stringify({
             users,
             counter: userIdCounter
         }, null, 2));
@@ -47,6 +58,10 @@ async function saveUsers() {
 
 // Email service
 async function sendEmail(emailData) {
+    if (!RESEND_API_KEY) {
+        return { success: false, skipped: true, error: 'RESEND_API_KEY is not configured' };
+    }
+
     return new Promise((resolve, reject) => {
         const postData = JSON.stringify(emailData);
         
@@ -90,6 +105,19 @@ async function sendEmail(emailData) {
         req.write(postData);
         req.end();
     });
+}
+
+function createAuthToken(user) {
+    return jwt.sign(
+        { userId: user.id, email: user.email },
+        JWT_SECRET,
+        { expiresIn: JWT_EXPIRES_IN }
+    );
+}
+
+function toPublicUser(user) {
+    const { password: _, ...userWithoutPassword } = user;
+    return userWithoutPassword;
 }
 
 // Welcome email template
@@ -259,11 +287,7 @@ app.post('/api/auth/signup', async (req, res) => {
         await saveUsers();
         
         // Generate JWT token
-        const token = jwt.sign(
-            { userId: user.id, email: user.email },
-            JWT_SECRET,
-            { expiresIn: '7d' }
-        );
+        const token = createAuthToken(user);
         
         // Send welcome email
         console.log(`📧 Sending welcome email to ${parentEmail}...`);
@@ -283,7 +307,7 @@ app.post('/api/auth/signup', async (req, res) => {
         }
         
         // Return user data (without password)
-        const { password: _, ...userWithoutPassword } = user;
+        const userWithoutPassword = toPublicUser(user);
         
         res.status(201).json({
             message: 'Account created successfully! Welcome email sent.',
@@ -322,14 +346,10 @@ app.post('/api/auth/login', async (req, res) => {
         }
         
         // Generate JWT token
-        const token = jwt.sign(
-            { userId: user.id, email: user.email },
-            JWT_SECRET,
-            { expiresIn: '7d' }
-        );
+        const token = createAuthToken(user);
         
         // Return user data (without password)
-        const { password: _, ...userWithoutPassword } = user;
+        const userWithoutPassword = toPublicUser(user);
         
         res.json({
             message: 'Login successful',
@@ -345,6 +365,16 @@ app.post('/api/auth/login', async (req, res) => {
     }
 });
 
+// Verify session endpoint (protected route)
+app.get('/api/auth/verify', authenticateToken, (req, res) => {
+    const user = users.find(u => u.id === req.user.userId && u.email === req.user.email);
+    if (!user) {
+        return res.status(401).json({ message: 'Invalid or expired token' });
+    }
+
+    res.json({ user: toPublicUser(user) });
+});
+
 // Get user profile (protected route)
 app.get('/api/auth/profile', authenticateToken, (req, res) => {
     const user = users.find(u => u.id === req.user.userId);
@@ -352,8 +382,7 @@ app.get('/api/auth/profile', authenticateToken, (req, res) => {
         return res.status(404).json({ message: 'User not found' });
     }
     
-    const { password: _, ...userWithoutPassword } = user;
-    res.json(userWithoutPassword);
+    res.json(toPublicUser(user));
 });
 
 // Middleware to authenticate JWT token
@@ -367,7 +396,7 @@ function authenticateToken(req, res, next) {
     
     jwt.verify(token, JWT_SECRET, (err, user) => {
         if (err) {
-            return res.status(403).json({ message: 'Invalid or expired token' });
+            return res.status(401).json({ message: 'Invalid or expired token' });
         }
         req.user = user;
         next();
@@ -429,8 +458,12 @@ app.post('/api/test-email', async (req, res) => {
 });
 
 // Get all users (for debugging - remove in production)
-app.get('/api/users', (req, res) => {
-    const usersWithoutPasswords = users.map(({ password, ...user }) => user);
+app.get('/api/users', authenticateToken, (req, res) => {
+    if (process.env.ENABLE_DEBUG_USERS !== 'true') {
+        return res.status(404).json({ message: 'Not found' });
+    }
+
+    const usersWithoutPasswords = users.map(toPublicUser);
     res.json({
         count: users.length,
         users: usersWithoutPasswords
@@ -441,7 +474,7 @@ app.get('/api/users', (req, res) => {
 async function startServer() {
     await loadUsers();
     
-    app.listen(PORT, () => {
+    return app.listen(PORT, () => {
         console.log('🚀 SpellBloc Backend Server Started!');
         console.log('=====================================');
         console.log(`📡 Server running on: http://localhost:${PORT}`);
@@ -458,6 +491,20 @@ async function startServer() {
     });
 }
 
-startServer().catch(console.error);
+if (require.main === module) {
+    startServer().catch((error) => {
+        console.error(error.message);
+        process.exit(1);
+    });
+}
 
 module.exports = app;
+module.exports.startServer = startServer;
+module.exports.loadUsers = loadUsers;
+module.exports.saveUsers = saveUsers;
+module.exports.requireJwtSecret = requireJwtSecret;
+module.exports.__setUsersForTest = (nextUsers, nextCounter = 1) => {
+    users = nextUsers;
+    userIdCounter = nextCounter;
+};
+module.exports.__getUsersForTest = () => users;

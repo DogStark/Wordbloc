@@ -77,36 +77,47 @@
     </div>
 
     <script>
-        function checkAuth() {
-            const user = localStorage.getItem('spellbloc_user');
+        async function checkAuth() {
+            const token = localStorage.getItem('spellbloc_token');
             const content = document.getElementById('content');
             
-            // Clear localStorage if it contains invalid data
-            if (user === 'null' || user === 'undefined' || user === '') {
+            if (!token || token === 'null' || token === 'undefined') {
                 localStorage.removeItem('spellbloc_user');
+                localStorage.removeItem('spellbloc_token');
+                content.innerHTML = '<div class="loading">Setting up your learning adventure...</div>';
+                setTimeout(() => {
+                    window.location.href = '/login.html';
+                }, 800);
+                return;
             }
-            
-            if (user && user !== 'null' && user !== 'undefined') {
-                try {
-                    const userData = JSON.parse(user);
-                    if (userData && userData.parentName && userData.childName) {
-                        // User is logged in, redirect to game
-                        content.innerHTML = `<div class="loading">Welcome back ${userData.childName}! Loading your game...</div>`;
-                        setTimeout(() => {
-                            window.location.href = '/game.html';
-                        }, 1500);
-                        return;
-                    }
-                } catch (e) {
-                    localStorage.removeItem('spellbloc_user');
+
+            try {
+                const response = await fetch('/api/auth/verify', {
+                    headers: {
+                        Authorization: `Bearer ${token}`
+                    },
+                    cache: 'no-store'
+                });
+
+                if (!response.ok) {
+                    throw new Error('Stored token was rejected');
                 }
+
+                const result = await response.json();
+                localStorage.setItem('spellbloc_user', JSON.stringify(result.user));
+                const childName = result.user && result.user.childName ? result.user.childName : 'Player';
+                content.innerHTML = `<div class="loading">Welcome back ${childName}! Loading your game...</div>`;
+                setTimeout(() => {
+                    window.location.href = '/game.html';
+                }, 1500);
+            } catch (error) {
+                localStorage.removeItem('spellbloc_user');
+                localStorage.removeItem('spellbloc_token');
+                content.innerHTML = '<div class="loading">Setting up your learning adventure...</div>';
+                setTimeout(() => {
+                    window.location.href = '/login.html';
+                }, 800);
             }
-            
-            // User not logged in, redirect to login immediately
-            content.innerHTML = '<div class="loading">Setting up your learning adventure...</div>';
-            setTimeout(() => {
-                window.location.href = '/login.html';
-            }, 800);
         }
         
         // Run auth check when page loads

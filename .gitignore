@@ -7,6 +7,9 @@ npm-debug.log*
 .env.local
 .env.production
 
+# Local runtime data
+users.json
+
 # Logs
 *.log
 

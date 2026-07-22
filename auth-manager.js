@@ -3,15 +3,15 @@ class AuthManager {
     constructor() {
         this.currentUser = null;
         this.isLoggedIn = false;
-        this.init();
+        this.authCheckPromise = this.init();
     }
 
-    init() {
-        // Check if user is logged in on page load
-        this.checkAuthStatus();
-        
+    async init() {
         // Setup logout button
         this.setupLogoutButton();
+
+        // Check if user is logged in on page load
+        await this.checkAuthStatus();
         
         // Setup login redirect
         this.setupLoginRedirect();
@@ -19,25 +19,63 @@ class AuthManager {
         console.log('🔐 Auth Manager initialized');
     }
 
-    checkAuthStatus() {
-        // Check localStorage for user data
-        const userData = localStorage.getItem('spellbloc_user');
+    async checkAuthStatus() {
+        // Trust only the server-verified token. The cached user blob is a display cache.
         const token = localStorage.getItem('spellbloc_token');
         
-        if (userData && token) {
-            try {
-                this.currentUser = JSON.parse(userData);
-                this.isLoggedIn = true;
-                this.showUserInfo();
-                console.log(`✅ User logged in: ${this.currentUser.parentName}`);
-            } catch (error) {
-                console.log('❌ Invalid user data, clearing session');
-                this.logout();
-            }
-        } else {
-            this.isLoggedIn = false;
-            this.hideUserInfo();
+        if (!token) {
+            this.clearSession();
             console.log('👤 No user session found');
+            this.redirectIfRequired();
+            return false;
+        }
+
+        try {
+            const response = await fetch('/api/auth/verify', {
+                headers: {
+                    Authorization: `Bearer ${token}`
+                },
+                cache: 'no-store'
+            });
+
+            if (!response.ok) {
+                throw new Error(`Session verification failed with ${response.status}`);
+            }
+
+            const result = await response.json();
+            if (!result || !result.user) {
+                throw new Error('Session verification response did not include a user');
+            }
+
+            this.currentUser = result.user;
+            this.isLoggedIn = true;
+            localStorage.setItem('spellbloc_user', JSON.stringify(result.user));
+            this.showUserInfo();
+            console.log(`✅ User logged in: ${this.currentUser.parentName}`);
+            return true;
+        } catch (error) {
+            console.log('❌ Invalid or expired session, clearing storage');
+            this.clearSession();
+            this.redirectIfRequired();
+            return false;
+        }
+    }
+
+    clearSession() {
+        localStorage.removeItem('spellbloc_user');
+        localStorage.removeItem('spellbloc_token');
+        this.currentUser = null;
+        this.isLoggedIn = false;
+        this.hideUserInfo();
+    }
+
+    isLoginPage() {
+        return window.location.pathname.includes('login');
+    }
+
+    redirectIfRequired() {
+        if (window.SPELLBLOC_REQUIRE_AUTH && !this.isLoginPage()) {
+            window.location.href = '/login.html';
         }
     }
 
@@ -122,23 +160,14 @@ class AuthManager {
     }
 
     logout() {
-        // Clear user data
-        localStorage.removeItem('spellbloc_user');
-        localStorage.removeItem('spellbloc_token');
-        
-        // Reset auth state
-        this.currentUser = null;
-        this.isLoggedIn = false;
-        
-        // Hide user info
-        this.hideUserInfo();
+        this.clearSession();
         
         // Show logout success message
         this.showLogoutMessage();
         
         // Redirect to login after delay
         setTimeout(() => {
-            window.location.href = '/login';
+            window.location.href = '/login.html';
         }, 2000);
         
         console.log('👋 User logged out successfully');
@@ -171,7 +200,12 @@ class AuthManager {
 
     setupLoginRedirect() {
         // If not logged in and not on login page, show login prompt
-        if (!this.isLoggedIn && !window.location.pathname.includes('login')) {
+        if (!this.isLoggedIn && !this.isLoginPage()) {
+            if (window.SPELLBLOC_REQUIRE_AUTH) {
+                window.location.href = '/login.html';
+                return;
+            }
+
             setTimeout(() => {
                 this.showLoginPrompt();
             }, 5000); // Show after 5 seconds
@@ -209,11 +243,11 @@ class AuthManager {
         
         // Add event listeners
         prompt.querySelector('.login-prompt-signup').addEventListener('click', () => {
-            window.location.href = '/login';
+            window.location.href = '/login.html';
         });
         
         prompt.querySelector('.login-prompt-login').addEventListener('click', () => {
-            window.location.href = '/login';
+            window.location.href = '/login.html';
         });
         
         prompt.querySelector('.login-prompt-later').addEventListener('click', () => {
@@ -496,7 +530,7 @@ class AuthManager {
     }
 
     refreshUserData() {
-        this.checkAuthStatus();
+        return this.checkAuthStatus();
     }
 }
 

@@ -459,6 +459,48 @@
             }
         }
 
+        function clearStoredSession() {
+            localStorage.removeItem('spellbloc_user');
+            localStorage.removeItem('spellbloc_token');
+        }
+
+        function persistAuthSession(result) {
+            if (!result || !result.user || !result.token) {
+                throw new Error('Authentication response did not include a user and token');
+            }
+
+            localStorage.setItem('spellbloc_user', JSON.stringify(result.user));
+            localStorage.setItem('spellbloc_token', result.token);
+        }
+
+        async function redirectIfAuthenticated() {
+            const token = localStorage.getItem('spellbloc_token');
+            if (!token) {
+                clearStoredSession();
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/auth/verify', {
+                    headers: {
+                        Authorization: `Bearer ${token}`
+                    },
+                    cache: 'no-store'
+                });
+
+                if (!response.ok) {
+                    clearStoredSession();
+                    return;
+                }
+
+                const result = await response.json();
+                persistAuthSession({ user: result.user, token });
+                window.location.href = '/';
+            } catch (error) {
+                clearStoredSession();
+            }
+        }
+
         // Login form submission
         loginForm.addEventListener('submit', async (e) => {
             e.preventDefault();
@@ -500,7 +542,7 @@
                 
                 if (response.ok) {
                     showNotification('Login successful! Redirecting...', 'success');
-                    localStorage.setItem('spellbloc_user', JSON.stringify(result.user));
+                    persistAuthSession(result);
                     setTimeout(() => {
                         window.location.href = '/';
                     }, 2000);
@@ -584,7 +626,7 @@
                 
                 if (response.ok) {
                     showNotification('Account created successfully! Check your email for welcome message.', 'success');
-                    localStorage.setItem('spellbloc_user', JSON.stringify(result.user));
+                    persistAuthSession(result);
                     setTimeout(() => {
                         window.location.href = '/';
                     }, 3000);
@@ -615,6 +657,8 @@
                 clearError('confirmPassword');
             }
         });
+
+        redirectIfAuthenticated();
     </script>
 </body>
 </html>
