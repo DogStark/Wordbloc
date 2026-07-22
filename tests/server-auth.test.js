@@ -247,6 +247,27 @@ runner.test('/api/users does not expose the user list by default', async () => {
   runner.assertEqual(authenticated.statusCode, 404, 'users endpoint should be disabled unless debug access is explicit');
 });
 
+runner.test('/api/users exposes public users only when debug access is explicit', async () => {
+  const previousDebugFlag = process.env.ENABLE_DEBUG_USERS;
+  const user = sampleUser();
+  const token = authTokenFor(user);
+  app.__setUsersForTest([user], 2);
+  process.env.ENABLE_DEBUG_USERS = 'true';
+
+  try {
+    const response = await request('GET', '/api/users', null, {
+      Authorization: `Bearer ${token}`
+    });
+
+    runner.assertEqual(response.statusCode, 200, 'debug users endpoint should be available when enabled');
+    runner.assertEqual(response.body.count, 1, 'debug users endpoint should return the user count');
+    runner.assertEqual(response.body.users[0].email, 'parent@example.test', 'debug users endpoint should return public user data');
+    runner.assertFalse(Object.prototype.hasOwnProperty.call(response.body.users[0], 'password'), 'debug users endpoint should not expose password hashes');
+  } finally {
+    process.env.ENABLE_DEBUG_USERS = previousDebugFlag;
+  }
+});
+
 runner.run().then((success) => {
   try {
     fs.unlinkSync(process.env.USERS_FILE_PATH);
