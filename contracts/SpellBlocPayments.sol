@@ -62,6 +62,14 @@ contract SpellBlocPayments is ReentrancyGuard, Ownable, Pausable {
         planPrices[planType] = price;
     }
 
+    function pause() external onlyOwner {
+        _pause();
+    }
+
+    function unpause() external onlyOwner {
+        _unpause();
+    }
+
     function withdrawFunds(uint256 amount) external onlyOwner nonReentrant {
         require(amount > 0 && amount <= paymentToken.balanceOf(address(this)), "Insufficient token balance");
         paymentToken.safeTransfer(owner(), amount);

@@ -255,56 +255,15 @@
     <script src="email-service.js"></script>
     <script src="email-integration.js"></script>
     <script src="email-setup-ui.js"></script>
+    <script>
+        window.SPELLBLOC_REQUIRE_AUTH = true;
+    </script>
     <script src="auth-manager.js"></script>
     <script src="game.js"></script>
     
     <!-- Authentication Check -->
     <script>
-        // Check if user is logged in
-        function checkAuth() {
-            const user = localStorage.getItem('spellbloc_user');
-            if (!user || user === 'null' || user === 'undefined') {
-                // Redirect to login page if not authenticated
-                window.location.href = '/login.html';
-                return false;
-            }
-            
-            try {
-                const userData = JSON.parse(user);
-                if (!userData || !userData.parentName || !userData.childName) {
-                    // Invalid user data, redirect to login
-                    localStorage.removeItem('spellbloc_user');
-                    window.location.href = '/login.html';
-                    return false;
-                }
-                
-                // Show user info if logged in
-                const userInfo = document.getElementById('userInfo');
-                const welcomeMessage = document.getElementById('welcomeMessage');
-                if (userInfo && welcomeMessage) {
-                    welcomeMessage.textContent = `Welcome ${userData.childName}! (Parent: ${userData.parentName})`;
-                    userInfo.classList.remove('hidden');
-                }
-                
-                return true;
-            } catch (e) {
-                // Invalid JSON, clear and redirect
-                localStorage.removeItem('spellbloc_user');
-                window.location.href = '/login.html';
-                return false;
-            }
-        }
-        
-        // Logout functionality
-        document.getElementById('logoutBtn')?.addEventListener('click', () => {
-            if (confirm('Are you sure you want to logout?')) {
-                localStorage.removeItem('spellbloc_user');
-                window.location.href = '/login.html';
-            }
-        });
-        
-        // Run auth check
-        checkAuth();
+        // AuthManager verifies the token with /api/auth/verify and owns redirects/logout.
     </script>
 </body>
 </html>
