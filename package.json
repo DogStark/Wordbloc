@@ -5,9 +5,10 @@
   "main": "index.js",
   "scripts": {
     "compile": "hardhat compile",
-    "test": "npm run test:security && npm run test:contracts",
+    "test": "npm run test:security && npm run test:telemetry && npm run test:contracts",
     "test:contracts": "hardhat test",
     "test:security": "node tests/server-auth.test.js && node tests/auth-manager.test.js",
+    "test:telemetry": "node tests/telemetry.test.js",
     "coverage": "hardhat coverage",
     "deploy:alfajores": "hardhat run scripts/deploy-celo-mainnet.js --network alfajores",
     "deploy:celo": "hardhat run scripts/deploy-celo-mainnet.js --network celo",
