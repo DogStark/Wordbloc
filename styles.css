@@ -16,6 +16,32 @@ html {
     -ms-text-size-adjust: 100%;
 }
 
+/* Accessibility */
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border-width: 0;
+}
+
+button:focus-visible, 
+input:focus-visible, 
+select:focus-visible, 
+.letter-tile:focus-visible, 
+.letter-slot:focus-visible {
+    outline: 4px solid #3b82f6;
+    outline-offset: 2px;
+}
+
+button {
+    font-family: inherit;
+}
+
 body {
     font-family: 'Comic Sans MS', 'Arial Rounded MT Bold', cursive, sans-serif;
     background: #4a5568;
