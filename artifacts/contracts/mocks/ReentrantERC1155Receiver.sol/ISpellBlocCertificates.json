@@ -1,0 +1,49 @@
+{
+  "_format": "hh-sol-artifact-1",
+  "contractName": "ISpellBlocCertificates",
+  "sourceName": "contracts/mocks/ReentrantERC1155Receiver.sol",
+  "abi": [
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "childWallet",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "certificateTypeId",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "wordsCompleted",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "accuracyAchieved",
+          "type": "uint256"
+        },
+        {
+          "internalType": "bytes32",
+          "name": "dataHash",
+          "type": "bytes32"
+        },
+        {
+          "internalType": "string",
+          "name": "ipfsHash",
+          "type": "string"
+        }
+      ],
+      "name": "issueCertificate",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    }
+  ],
+  "bytecode": "0x",
+  "deployedBytecode": "0x",
+  "linkReferences": {},
+  "deployedLinkReferences": {}
+}

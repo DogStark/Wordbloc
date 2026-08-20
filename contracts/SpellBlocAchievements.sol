@@ -9,8 +9,28 @@ import "@openzeppelin/contracts/utils/Counters.sol";
 
 /**
  * @title SpellBlocAchievements
- * @dev NFT contract for SpellBloc learning achievements
- * Soulbound tokens that represent verified learning milestones
+ * @dev NFT contract for SpellBloc learning achievements.
+ *
+ * SOULBOUND SEMANTICS
+ * -------------------
+ * Each achievement template carries a `soulbound` flag. When that flag is
+ * true, any ERC-721 transfer (transferFrom / safeTransferFrom) by anyone
+ * other than the contract itself is rejected. Minting (from == address(0))
+ * is always allowed. Burning a soulbound token can only be performed by the
+ * contract owner via `adminBurn` — this is the sole supported recovery path
+ * (e.g., wallet compromise, account migration with consent).
+ *
+ * TRANSFERABLE ACHIEVEMENTS
+ * -------------------------
+ * When `soulbound` is false (purchasable specials such as "Golden Star"),
+ * ERC-721 transfers work normally. All ownership-indexing state
+ * (userAchievements, hasAchievement, userAchievementCount, totalHolders) is
+ * updated consistently on every transfer and burn via `_afterTokenTransfer`.
+ *
+ * TOKEN → ACHIEVEMENT LOOKUP
+ * --------------------------
+ * `tokenAchievementId[tokenId]` is set immutably at mint time and is
+ * readable by any caller.
  */
 contract SpellBlocAchievements is ERC721, ERC721URIStorage, Ownable, Pausable {
     using Counters for Counters.Counter;
@@ -37,7 +57,7 @@ contract SpellBlocAchievements is ERC721, ERC721URIStorage, Ownable, Pausable {
         Rarity rarity;
         uint256 requirement;        // Words needed, accuracy %, days streak, etc.
         bool soulbound;            // Cannot be transferred
-        bool purchasable;          // Can be bought with cUSD
+        bool purchasable;          // Can be bought with native value
         uint256 price;             // Price in wei if purchasable
         uint256 totalMinted;       // Total number minted
         uint256 maxSupply;         // Maximum that can be minted (0 = unlimited)
@@ -49,6 +69,14 @@ contract SpellBlocAchievements is ERC721, ERC721URIStorage, Ownable, Pausable {
     mapping(address => uint256[]) public userAchievements;
     mapping(address => mapping(uint256 => bool)) public hasAchievement;
     mapping(uint256 => address) public achievementCreator; // Who earned it first
+
+    /**
+     * @notice Immutable token-to-template lookup.
+     * Set once at mint time; never changed afterwards.
+     * Allows any caller to determine which achievement template a token
+     * represents without relying on off-chain data.
+     */
+    mapping(uint256 => uint256) public tokenAchievementId;
     
     // Statistics
     uint256 public totalAchievements;
@@ -74,6 +102,30 @@ contract SpellBlocAchievements is ERC721, ERC721URIStorage, Ownable, Pausable {
         address indexed user,
         uint256 indexed achievementId,
         uint256 price
+    );
+
+    /**
+     * @notice Emitted when a non-soulbound achievement token is transferred
+     * between two non-zero addresses. Suitable for off-chain indexers that
+     * need to track ownership changes without re-scanning all ERC-721 Transfer
+     * events.
+     */
+    event AchievementTransferred(
+        address indexed from,
+        address indexed to,
+        uint256 indexed tokenId,
+        uint256 achievementId
+    );
+
+    /**
+     * @notice Emitted when a token is burned (to == address(0)).
+     * Covers both admin burns of soulbound tokens and any future burn paths
+     * for transferable tokens.
+     */
+    event AchievementBurned(
+        address indexed from,
+        uint256 indexed tokenId,
+        uint256 achievementId
     );
     
     constructor() ERC721("SpellBloc Achievements", "SBA") {
@@ -181,7 +233,7 @@ contract SpellBlocAchievements is ERC721, ERC721URIStorage, Ownable, Pausable {
             0,
             false, // not soulbound, can be transferred
             true,  // purchasable
-            0.5 * 10**18, // 0.5 cUSD
+            0.5 * 10**18, // 0.5 native (CELO on mainnet)
             1000   // limited supply
         );
         
@@ -193,7 +245,7 @@ contract SpellBlocAchievements is ERC721, ERC721URIStorage, Ownable, Pausable {
             0,
             false,
             true,
-            2.0 * 10**18, // 2.0 cUSD
+            2.0 * 10**18, // 2.0 native (CELO on mainnet)
             100    // very limited supply
         );
     }
@@ -229,6 +281,49 @@ contract SpellBlocAchievements is ERC721, ERC721URIStorage, Ownable, Pausable {
         emit AchievementCreated(totalAchievements, name, achievementType, rarity);
         totalAchievements++;
     }
+
+    // -----------------------------------------------------------------------
+    // Internal indexing helpers
+    // -----------------------------------------------------------------------
+
+    /**
+     * @dev Add `tokenId` to `user`'s ownership index and update
+     * userAchievementCount / totalHolders.
+     */
+    function _addToOwnerIndex(address user, uint256 tokenId) private {
+        userAchievements[user].push(tokenId);
+        if (userAchievementCount[user] == 0) {
+            totalHolders++;
+        }
+        userAchievementCount[user]++;
+    }
+
+    /**
+     * @dev Remove `tokenId` from `user`'s ownership array (swap-and-pop),
+     * decrement userAchievementCount, and decrement totalHolders if the user
+     * no longer holds any tokens.
+     */
+    function _removeFromOwnerIndex(address user, uint256 tokenId) private {
+        uint256[] storage arr = userAchievements[user];
+        uint256 len = arr.length;
+        for (uint256 i = 0; i < len; i++) {
+            if (arr[i] == tokenId) {
+                arr[i] = arr[len - 1];
+                arr.pop();
+                break;
+            }
+        }
+        if (userAchievementCount[user] > 0) {
+            userAchievementCount[user]--;
+        }
+        if (userAchievementCount[user] == 0 && totalHolders > 0) {
+            totalHolders--;
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Mint
+    // -----------------------------------------------------------------------
     
     /**
      * @dev Mint achievement NFT to user (called by game backend)
@@ -255,12 +350,15 @@ contract SpellBlocAchievements is ERC721, ERC721URIStorage, Ownable, Pausable {
         
         uint256 tokenId = _tokenIdCounter.current();
         _tokenIdCounter.increment();
+
+        // Record immutable token → template relationship before minting so
+        // that _beforeTokenTransfer can read it even during the safeMint call.
+        tokenAchievementId[tokenId] = achievementId;
         
         _safeMint(to, tokenId);
         _setTokenURI(tokenId, metadataUri);
         
         // Update mappings
-        userAchievements[to].push(tokenId);
         hasAchievement[to][achievementId] = true;
         achievement.totalMinted++;
         
@@ -269,11 +367,8 @@ contract SpellBlocAchievements is ERC721, ERC721URIStorage, Ownable, Pausable {
             achievementCreator[achievementId] = to;
         }
         
-        // Update user stats
-        if (userAchievementCount[to] == 0) {
-            totalHolders++;
-        }
-        userAchievementCount[to]++;
+        // userAchievements / count / totalHolders are updated in
+        // _afterTokenTransfer to keep a single authoritative code path.
         
         emit AchievementMinted(to, tokenId, achievementId, achievement.name);
     }
@@ -302,20 +397,19 @@ contract SpellBlocAchievements is ERC721, ERC721URIStorage, Ownable, Pausable {
         
         uint256 tokenId = _tokenIdCounter.current();
         _tokenIdCounter.increment();
+
+        // Record immutable token → template relationship before minting.
+        tokenAchievementId[tokenId] = achievementId;
         
         _safeMint(msg.sender, tokenId);
         _setTokenURI(tokenId, metadataUri);
         
         // Update mappings
-        userAchievements[msg.sender].push(tokenId);
         hasAchievement[msg.sender][achievementId] = true;
         achievement.totalMinted++;
         
-        // Update user stats
-        if (userAchievementCount[msg.sender] == 0) {
-            totalHolders++;
-        }
-        userAchievementCount[msg.sender]++;
+        // userAchievements / count / totalHolders are updated in
+        // _afterTokenTransfer.
         
         emit AchievementPurchased(msg.sender, achievementId, msg.value);
         emit AchievementMinted(msg.sender, tokenId, achievementId, achievement.name);
@@ -325,7 +419,38 @@ contract SpellBlocAchievements is ERC721, ERC721URIStorage, Ownable, Pausable {
             payable(msg.sender).transfer(msg.value - achievement.price);
         }
     }
+
+    // -----------------------------------------------------------------------
+    // Admin burn (soulbound recovery)
+    // -----------------------------------------------------------------------
+
+    /**
+     * @notice Burn a token that belongs to `holder`.
+     *
+     * This is the ONLY supported burn path for soulbound tokens. It is
+     * intentionally restricted to the contract owner and should be used
+     * only in documented recovery scenarios (e.g., a child's custodial
+     * wallet is compromised and a replacement is being issued).
+     *
+     * For transferable tokens (soulbound == false) the owner may also call
+     * this to revoke a token administratively.
+     *
+     * All ownership-index state (userAchievements, hasAchievement,
+     * userAchievementCount, totalHolders) is cleaned up atomically via
+     * _afterTokenTransfer.
+     *
+     * @param holder  Current owner of the token
+     * @param tokenId Token to burn
+     */
+    function adminBurn(address holder, uint256 tokenId) external onlyOwner {
+        require(ownerOf(tokenId) == holder, "Token not owned by holder");
+        _burn(tokenId);
+    }
     
+    // -----------------------------------------------------------------------
+    // View helpers
+    // -----------------------------------------------------------------------
+
     /**
      * @dev Get user's achievements
      * @param user User address
@@ -363,7 +488,9 @@ contract SpellBlocAchievements is ERC721, ERC721URIStorage, Ownable, Pausable {
         return (totalAchievements, totalHolders, _tokenIdCounter.current());
     }
     
+    // -----------------------------------------------------------------------
     // Admin functions
+    // -----------------------------------------------------------------------
     
     /**
      * @dev Create new achievement template (only owner)
@@ -431,10 +558,20 @@ contract SpellBlocAchievements is ERC721, ERC721URIStorage, Ownable, Pausable {
         _unpause();
     }
     
-    // Override functions
+    // -----------------------------------------------------------------------
+    // ERC-721 hook overrides
+    // -----------------------------------------------------------------------
     
     /**
-     * @dev Override transfer to implement soulbound tokens
+     * @dev Enforce soulbound restrictions and the Pausable guard.
+     *
+     * Rules:
+     *  - Mint (from == address(0)): always allowed (subject to whenNotPaused
+     *    guard on the external entry points).
+     *  - Burn  (to   == address(0)): always allowed here; the public surface
+     *    is restricted to `adminBurn` (onlyOwner).
+     *  - Transfer (both addresses non-zero): reverts when the underlying
+     *    achievement template is soulbound.
      */
     function _beforeTokenTransfer(
         address from,
@@ -444,15 +581,66 @@ contract SpellBlocAchievements is ERC721, ERC721URIStorage, Ownable, Pausable {
     ) internal override {
         super._beforeTokenTransfer(from, to, tokenId, batchSize);
         
-        // Allow minting and burning, but check soulbound for transfers
+        // Pure transfer — neither mint nor burn.
         if (from != address(0) && to != address(0)) {
-            // This is a transfer, check if token is soulbound
-            // We need to find which achievement this token represents
-            // For simplicity, we'll allow all transfers for now
-            // In production, you'd want to track which tokens are soulbound
+            uint256 achId = tokenAchievementId[tokenId];
+            require(
+                !achievements[achId].soulbound,
+                "Achievement is soulbound and cannot be transferred"
+            );
         }
     }
-    
+
+    /**
+     * @dev Maintain ownership-index state after every token movement.
+     *
+     * This is the single authoritative place where userAchievements,
+     * userAchievementCount, totalHolders, and hasAchievement are updated
+     * for transfers and burns. Mints are also handled here so that both
+     * mintAchievement and purchaseAchievement share the same code path.
+     *
+     * Cases:
+     *  - Mint  (from == address(0)): add token to recipient's index.
+     *  - Burn  (to   == address(0)): remove token from sender's index,
+     *    clear hasAchievement for that sender.
+     *  - Transfer: remove from sender's index (clear hasAchievement),
+     *    add to recipient's index (set hasAchievement), emit
+     *    AchievementTransferred.
+     */
+    function _afterTokenTransfer(
+        address from,
+        address to,
+        uint256 tokenId,
+        uint256 batchSize
+    ) internal override {
+        super._afterTokenTransfer(from, to, tokenId, batchSize);
+
+        uint256 achId = tokenAchievementId[tokenId];
+
+        if (from == address(0)) {
+            // ── Mint ──────────────────────────────────────────────────────
+            _addToOwnerIndex(to, tokenId);
+            // hasAchievement[to][achId] is already set by the mint function
+            // before _safeMint is called, so we do not set it again here.
+
+        } else if (to == address(0)) {
+            // ── Burn ──────────────────────────────────────────────────────
+            _removeFromOwnerIndex(from, tokenId);
+            hasAchievement[from][achId] = false;
+            emit AchievementBurned(from, tokenId, achId);
+
+        } else {
+            // ── Transfer (non-soulbound, already validated in _before) ────
+            _removeFromOwnerIndex(from, tokenId);
+            hasAchievement[from][achId] = false;
+
+            _addToOwnerIndex(to, tokenId);
+            hasAchievement[to][achId] = true;
+
+            emit AchievementTransferred(from, to, tokenId, achId);
+        }
+    }
+
     function _burn(uint256 tokenId) internal override(ERC721, ERC721URIStorage) {
         super._burn(tokenId);
     }
@@ -476,7 +664,10 @@ contract SpellBlocAchievements is ERC721, ERC721URIStorage, Ownable, Pausable {
     }
     
     /**
-     * @dev Receive function to accept cUSD payments
+     * @dev Receive function to accept native-value payments for purchasable
+     * achievements. On Celo mainnet this is CELO; on Alfajores testnet this
+     * is test CELO. The purchasable achievement price fields are denominated
+     * in the same unit (wei-equivalent of the native asset).
      */
     receive() external payable {}
 }
