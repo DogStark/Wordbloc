@@ -5,11 +5,19 @@ class AdaptiveLearningEngine {
         this.srsEngine = new SRSEngine();
         this.analytics = new LearningAnalytics();
         this.childId = null;
+        this.difficultyLevel = 1;
     }
 
     initialize(childId) {
-        this.childId = childId;
-        this.srsEngine.initialize(childId);
+        this.childId = childId || (typeof telemetry !== 'undefined' ? telemetry.getActiveChildId() : 'default');
+        if (typeof telemetry !== 'undefined') {
+            telemetry.setActiveChild(this.childId);
+            this.analytics = telemetry.forChild(this.childId);
+            if (typeof rewardSystem !== 'undefined' && rewardSystem.setChild) {
+                rewardSystem.setChild(this.childId);
+            }
+        }
+        this.srsEngine.initialize(this.childId);
     }
 
     /**
@@ -34,17 +42,18 @@ class AdaptiveLearningEngine {
         // Record in SRS engine
         const wordId = word; // Use word as ID for simplicity
         const state = this.srsEngine.recordResponse(wordId, word, category, quality, responseTimeMs);
-        
-        // Record in analytics
-        const performance = {
+
+        this.analytics.recordAttempt({
             correct: isCorrect,
-            time: responseTimeMs,
+            durationMs: responseTimeMs,
             timestamp: Date.now(),
             category: category,
-            word: word
-        };
-        this.analytics.recordAttempt(performance);
-        
+            word: word,
+            locale: (typeof currentLanguage !== 'undefined' && currentLanguage) ? currentLanguage : 'en',
+            mode: (typeof gameModeManager !== 'undefined' && gameModeManager.currentMode) ? gameModeManager.currentMode : 'classic',
+            hintCount: (typeof telemetry !== 'undefined') ? telemetry.currentHintCount : 0
+        });
+
         return state;
     }
 
@@ -93,111 +102,7 @@ class AdaptiveLearningEngine {
     }
 }
 
-class LearningAnalytics {
-    constructor() {
-        this.sessions = [];
-        this.currentSession = null;
-    }
-
-    startSession() {
-        this.currentSession = {
-            startTime: Date.now(),
-            attempts: [],
-            wordsLearned: [],
-            totalTime: 0
-        };
-    }
-
-    recordAttempt(attempt) {
-        if (this.currentSession) {
-            this.currentSession.attempts.push(attempt);
-        }
-    }
-
-    endSession() {
-        if (this.currentSession) {
-            this.currentSession.endTime = Date.now();
-            this.currentSession.totalTime = this.currentSession.endTime - this.currentSession.startTime;
-            this.sessions.push(this.currentSession);
-            this.saveAnalytics();
-            this.currentSession = null;
-        }
-    }
-
-    getProgressReport() {
-        const totalSessions = this.sessions.length;
-        const totalAttempts = this.sessions.reduce((sum, s) => sum + s.attempts.length, 0);
-        const correctAttempts = this.sessions.reduce((sum, s) => 
-            sum + s.attempts.filter(a => a.correct).length, 0);
-        const accuracy = totalAttempts > 0 ? (correctAttempts / totalAttempts) * 100 : 0;
-        
-        return {
-            totalSessions,
-            totalAttempts,
-            accuracy: Math.round(accuracy),
-            averageSessionTime: totalSessions > 0 ? 
-                Math.round(this.sessions.reduce((sum, s) => sum + s.totalTime, 0) / totalSessions / 1000) : 0,
-            weakAreas: this.identifyWeakAreas(),
-            strongAreas: this.identifyStrongAreas()
-        };
-    }
-
-    identifyWeakAreas() {
-        // Analyze which categories have lower accuracy
-        const categoryPerformance = {};
-        this.sessions.forEach(session => {
-            session.attempts.forEach(attempt => {
-                const category = attempt.category || 'unknown';
-                if (!categoryPerformance[category]) {
-                    categoryPerformance[category] = { correct: 0, total: 0 };
-                }
-                categoryPerformance[category].total++;
-                if (attempt.correct) categoryPerformance[category].correct++;
-            });
-        });
-        
-        return Object.entries(categoryPerformance)
-            .map(([cat, perf]) => ({ 
-                category: cat, 
-                accuracy: (perf.correct / perf.total) * 100 
-            }))
-            .filter(item => item.accuracy < 70)
-            .sort((a, b) => a.accuracy - b.accuracy);
-    }
-
-    identifyStrongAreas() {
-        const categoryPerformance = {};
-        this.sessions.forEach(session => {
-            session.attempts.forEach(attempt => {
-                const category = attempt.category || 'unknown';
-                if (!categoryPerformance[category]) {
-                    categoryPerformance[category] = { correct: 0, total: 0 };
-                }
-                categoryPerformance[category].total++;
-                if (attempt.correct) categoryPerformance[category].correct++;
-            });
-        });
-        
-        return Object.entries(categoryPerformance)
-            .map(([cat, perf]) => ({ 
-                category: cat, 
-                accuracy: (perf.correct / perf.total) * 100 
-            }))
-            .filter(item => item.accuracy >= 80)
-            .sort((a, b) => b.accuracy - a.accuracy);
-    }
-
-    saveAnalytics() {
-        localStorage.setItem('spellbloc_analytics', JSON.stringify(this.sessions));
-    }
-
-    loadAnalytics() {
-        const saved = localStorage.getItem('spellbloc_analytics');
-        if (saved) {
-            this.sessions = JSON.parse(saved);
-        }
-    }
-}
+// LearningAnalytics lives in telemetry.js (single event stream for reports + rewards).
 
 // Game Modes
 class GameModeManager {
@@ -577,8 +482,8 @@ const gameModeManager = new GameModeManager();
 const accessibilityManager = new AccessibilityManager();
 const spellBlocPayments = useSpellBlocPayments(); // MiniPay integration
 
-// Load analytics on startup
-adaptiveLearning.analytics.loadAnalytics();
+// Bind analytics to the active child; telemetry.js already migrated legacy storage.
+adaptiveLearning.initialize(typeof telemetry !== 'undefined' ? telemetry.getActiveChildId() : 'default');
 const curriculum = {
     age2: {
         name: "First Letters",
@@ -1633,7 +1538,6 @@ document.addEventListener('DOMContentLoaded', () => {
     updateAgeDisplay();
     setupEventListeners();
     setupAdvancedFeatures();
-    adaptiveLearning.analytics.startSession();
     
     // Debug: Test letter creation
     console.log('SpellBloc initialized successfully!');
@@ -1765,22 +1669,46 @@ function setupEventListeners() {
     volumeControl.addEventListener('input', (e) => {
         volume = e.target.value / 100;
     });
-}
 
-function showScreen(screen) {
-    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-    if (screen === 'home') {
-        homeScreen.classList.add('active');
-    } else if (screen === 'game') {
-        gameScreen.classList.add('active');
-    } else if (screen === 'victory') {
-        victoryScreen.classList.add('active');
+    const hintBtn = document.getElementById('hintBtn');
+    if (hintBtn) hintBtn.addEventListener('click', showHint);
+
+    const parentDashboardBtn = document.getElementById('parentDashboardBtn');
+    if (parentDashboardBtn) parentDashboardBtn.addEventListener('click', showParentDashboard);
+
+    const dashboardBackBtn = document.getElementById('dashboardBackBtn');
+    if (dashboardBackBtn) dashboardBackBtn.addEventListener('click', () => showScreen('home'));
+
+    const addCustomWordsBtn = document.getElementById('addCustomWordsBtn');
+    if (addCustomWordsBtn) addCustomWordsBtn.addEventListener('click', addCustomWords);
+
+    const childSelect = document.getElementById('childSelect');
+    if (childSelect) {
+        childSelect.addEventListener('change', (e) => {
+            switchActiveChild(e.target.value);
+        });
+    }
+
+    const addChildBtn = document.getElementById('addChildBtn');
+    if (addChildBtn) {
+        addChildBtn.addEventListener('click', () => {
+            const input = document.getElementById('newChildName');
+            const name = (input && input.value || '').trim();
+            if (!name) return;
+            const id = parentDashboard.createChildProfile(name);
+            switchActiveChild(id);
+            if (input) input.value = '';
+        });
     }
 }
 
 function startGame() {
     const currentMode = gameModeManager.getCurrentMode();
     startTime = Date.now();
+    adaptiveLearning.analytics.startSession({
+        mode: gameModeManager.currentMode || 'classic',
+        difficulty: adaptiveLearning.difficultyLevel || null
+    });
     
     // Show instructions first
     showGameInstructions();
@@ -1815,6 +1743,8 @@ function loadWord() {
     const wordObj = words[currentWordIndex];
     currentWord = wordObj.word;
     userAnswer = [];
+    startTime = Date.now();
+    if (typeof telemetry !== 'undefined') telemetry.resetHints();
 
     // Update UI
     wordImage.textContent = wordObj.emoji;
@@ -1998,9 +1928,7 @@ function handleCorrectAnswer() {
     
     playSound('success');
     
-    // Record performance for adaptive learning
-    adaptiveLearning.adjustDifficulty(true, timeToComplete);
-    adaptiveLearning.scheduleSpacedRepetition(currentWord, adaptiveLearning.difficultyLevel);
+    adaptiveLearning.recordAttempt(currentWord, currentCategory, true, timeToComplete * 1000);
     
     // Update difficulty indicator
     const difficultyElement = document.getElementById('difficultyLevel');
@@ -2065,8 +1993,7 @@ function handleIncorrectAnswer() {
     
     playSound('error');
     
-    // Record performance for adaptive learning
-    adaptiveLearning.adjustDifficulty(false, timeToComplete);
+    adaptiveLearning.recordAttempt(currentWord, currentCategory, false, timeToComplete * 1000);
     
     // Update difficulty indicator
     const difficultyElement = document.getElementById('difficultyLevel');
@@ -2103,6 +2030,11 @@ function nextWord() {
     
     currentCategory = categories[nextIndex];
     currentWordIndex = 0;
+    startTime = Date.now();
+    adaptiveLearning.analytics.startSession({
+        mode: gameModeManager.currentMode || 'classic',
+        difficulty: adaptiveLearning.difficultyLevel || null
+    });
     showScreen('game');
     loadWord();
 }
@@ -2193,35 +2125,70 @@ document.addEventListener('touchmove', (e) => {
 }, { passive: false });
 // Advanced Feature Functions
 
+function switchActiveChild(childId) {
+    const id = telemetry.setActiveChild(childId);
+    adaptiveLearning.initialize(id);
+    rewardSystem.setChild(id);
+    updateDashboardContent();
+}
+
 function showParentDashboard() {
     showScreen('dashboard');
     updateDashboardContent();
 }
 
+function renderChildSwitcher() {
+    const select = document.getElementById('childSelect');
+    const label = document.getElementById('activeChildLabel');
+    if (!select || typeof telemetry === 'undefined') return;
+    const active = telemetry.getActiveChildId();
+    select.innerHTML = telemetry.listChildren().map((child) => (
+        `<option value="${child.id}"${child.id === active ? ' selected' : ''}>${child.name}</option>`
+    )).join('');
+    if (label) label.textContent = `Showing reports for ${telemetry.dumpChild(active).name}`;
+}
+
 function updateDashboardContent() {
-    const report = parentDashboard.generateProgressReport('default', 'week');
-    
-    // Update progress stats
+    const childId = typeof telemetry !== 'undefined' ? telemetry.getActiveChildId() : 'default';
+    const report = parentDashboard.generateProgressReport(childId, 'week');
+    renderChildSwitcher();
+
     const statsContainer = document.getElementById('progressStats');
     if (statsContainer && report) {
+        const summary = report.summary;
         statsContainer.innerHTML = `
             <div class="progress-stat">
-                <div class="value">${report.summary.totalSessions}</div>
+                <div class="value">${summary.totalSessions}</div>
                 <div class="label">Sessions</div>
             </div>
             <div class="progress-stat">
-                <div class="value">${report.summary.accuracy}%</div>
+                <div class="value">${summary.accuracy}%</div>
                 <div class="label">Accuracy</div>
             </div>
             <div class="progress-stat">
-                <div class="value">${report.summary.totalAttempts}</div>
-                <div class="label">Words Practiced</div>
+                <div class="value">${summary.totalAttempts}</div>
+                <div class="label">Attempts</div>
             </div>
             <div class="progress-stat">
-                <div class="value">${Math.round(report.summary.averageSessionTime / 60)}m</div>
+                <div class="value">${summary.uniqueWordsLearned}</div>
+                <div class="label">Words Learned</div>
+            </div>
+            <div class="progress-stat">
+                <div class="value">${typeof summary.averageTime === 'number' ? summary.averageTime.toFixed(1) : 0}s</div>
+                <div class="label">Avg Time</div>
+            </div>
+            <div class="progress-stat">
+                <div class="value">${Math.round((summary.averageSessionTime || 0) / 60)}m</div>
                 <div class="label">Avg Session</div>
             </div>
         `;
+    }
+
+    const chart = document.getElementById('progressChart');
+    if (chart && report) {
+        const weak = (report.summary.weakAreas || []).map((a) => `${a.category} ${Math.round(a.accuracy)}%`).join(', ') || 'none';
+        const strong = (report.summary.strongAreas || []).map((a) => `${a.category} ${Math.round(a.accuracy)}%`).join(', ') || 'none';
+        chart.innerHTML = `<p>Weak: ${weak}</p><p>Strong: ${strong}</p>`;
     }
     
     // Update achievements
@@ -2287,6 +2254,7 @@ function showHint() {
         return;
     }
     
+    if (typeof telemetry !== 'undefined') telemetry.recordHint();
     const hintText = `The word starts with "${currentWord[0].toUpperCase()}"`;
     feedback.textContent = `💡 Hint: ${hintText}`;
     feedback.className = 'feedback hint';

@@ -39,6 +39,7 @@
     <meta property="twitter:image" content="/twitter-image.png">
     
     <!-- Preload critical resources -->
+    <link rel="preload" href="telemetry.js" as="script">
     <link rel="preload" href="advanced-systems.js" as="script">
     <link rel="preload" href="game.js" as="script">
 </head>
@@ -193,8 +194,18 @@
                 <h2>Parent Dashboard</h2>
                 <button id="dashboardBackBtn" class="icon-btn">🏠</button>
             </div>
-            
+
             <div class="dashboard-content">
+                <div class="dashboard-section">
+                    <h3>Child</h3>
+                    <div class="custom-words-controls">
+                        <select id="childSelect"></select>
+                        <input type="text" id="newChildName" placeholder="Add child name">
+                        <button id="addChildBtn">Add child</button>
+                    </div>
+                    <p id="activeChildLabel"></p>
+                </div>
+
                 <div class="dashboard-section">
                     <h3>Progress Overview</h3>
                     <div id="progressChart" class="progress-chart"></div>
@@ -250,6 +261,7 @@
 
     <script src="offline-store.js"></script>
     <script src="srs-engine.js"></script>
+    <script src="telemetry.js"></script>
     <script src="advanced-systems.js"></script>
     <script src="ai-agent.js"></script>
     <script src="email-service.js"></script>

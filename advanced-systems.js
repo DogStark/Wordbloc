@@ -1,6 +1,21 @@
 // Reward System
 class RewardSystem {
     constructor() {
+        this.childId = 'default';
+        this.badges = [];
+        this.avatarParts = [];
+        this.collectibles = [];
+        this.achievements = new Map();
+        this.loadRewards();
+    }
+
+    _key() {
+        return `spellbloc_rewards_${this.childId || 'default'}`;
+    }
+
+    setChild(childId) {
+        this.saveRewards();
+        this.childId = childId || 'default';
         this.badges = [];
         this.avatarParts = [];
         this.collectibles = [];
@@ -28,7 +43,7 @@ class RewardSystem {
         const achievements = [
             { id: 'first_word', condition: () => stats.totalAttempts >= 1, reward: 'badge_beginner' },
             { id: 'perfect_ten', condition: () => stats.accuracy === 100 && stats.totalAttempts >= 10, reward: 'badge_perfect' },
-            { id: 'speed_demon', condition: () => stats.averageTime < 5, reward: 'avatar_lightning' },
+            { id: 'speed_demon', condition: () => stats.totalAttempts >= 1 && stats.averageTime < 5, reward: 'avatar_lightning' },
             { id: 'persistent', condition: () => stats.totalSessions >= 7, reward: 'badge_persistent' }
         ];
 
@@ -87,22 +102,39 @@ class RewardSystem {
     }
 
     saveRewards() {
-        localStorage.setItem('spellbloc_rewards', JSON.stringify({
+        const payload = JSON.stringify({
             badges: this.badges,
             avatarParts: this.avatarParts,
             collectibles: this.collectibles,
             achievements: Array.from(this.achievements.entries())
-        }));
+        });
+        try {
+            localStorage.setItem(this._key(), payload);
+            if (this.childId === 'default') {
+                localStorage.setItem('spellbloc_rewards', payload);
+            }
+        } catch (e) { /* quota */ }
     }
 
     loadRewards() {
-        const saved = localStorage.getItem('spellbloc_rewards');
-        if (saved) {
+        let saved = null;
+        try {
+            saved = localStorage.getItem(this._key()) || (this.childId === 'default' ? localStorage.getItem('spellbloc_rewards') : null);
+        } catch (e) {
+            saved = null;
+        }
+        if (!saved) return;
+        try {
             const data = JSON.parse(saved);
             this.badges = data.badges || [];
             this.avatarParts = data.avatarParts || [];
             this.collectibles = data.collectibles || [];
             this.achievements = new Map(data.achievements || []);
+        } catch (e) {
+            this.badges = [];
+            this.avatarParts = [];
+            this.collectibles = [];
+            this.achievements = new Map();
         }
     }
 }
@@ -487,38 +519,54 @@ class ParentDashboard {
     }
 
     createChildProfile(name, age, grade) {
-        const profileId = Date.now().toString();
+        const profileId = (typeof telemetry !== 'undefined')
+            ? telemetry.createChild(name)
+            : Date.now().toString();
         const profile = {
             id: profileId,
             name,
             age,
             grade,
             createdAt: Date.now(),
-            analytics: new LearningAnalytics(),
             customSettings: {
                 difficulty: 'auto',
                 categories: 'all',
                 timeLimit: null
             }
         };
-        
+
         this.childProfiles.set(profileId, profile);
         this.saveDashboardData();
         return profileId;
     }
 
-    generateProgressReport(profileId, timeframe = 'week') {
+    _analyticsFor(profileId) {
+        const childId = (typeof telemetry !== 'undefined' && profileId && telemetry.state.children[profileId])
+            ? profileId
+            : (typeof telemetry !== 'undefined' ? telemetry.getActiveChildId() : 'default');
+        if (typeof telemetry !== 'undefined') {
+            return telemetry.forChild(childId);
+        }
         const profile = this.childProfiles.get(profileId);
-        if (!profile) return null;
+        return (profile && profile.analytics) || new LearningAnalytics();
+    }
 
-        const analytics = profile.analytics;
+    generateProgressReport(profileId, timeframe = 'week') {
+        const analytics = this._analyticsFor(profileId);
+        const childId = analytics.childId || profileId || 'default';
+        const profile = this.childProfiles.get(profileId) || this.childProfiles.get(childId) || {
+            id: childId,
+            name: (typeof telemetry !== 'undefined' && telemetry.dumpChild(childId).name) || 'Player'
+        };
+
         const report = {
+            childId,
             childName: profile.name,
             timeframe,
             generatedAt: Date.now(),
-            summary: analytics.getProgressReport(),
+            summary: analytics.getProgressReport(timeframe),
             recommendations: this.generateRecommendations(analytics),
-            achievements: this.getRecentAchievements(profileId),
+            achievements: this.getRecentAchievements(profileId || childId),
             nextGoals: this.suggestNextGoals(analytics)
         };
 
@@ -539,9 +587,10 @@ class ParentDashboard {
             });
         }
 
-        if (analytics.sessions.length > 0) {
+        if (analytics.sessions && analytics.sessions.length > 0) {
             const lastSession = analytics.sessions[analytics.sessions.length - 1];
-            const sessionTime = lastSession.totalTime / 1000 / 60; // minutes
+            const elapsedMs = (lastSession.endedAt || lastSession.endTime || 0) - (lastSession.startedAt || lastSession.startTime || 0);
+            const sessionTime = (lastSession.totalTime || elapsedMs) / 1000 / 60; // minutes
             
             if (sessionTime < 5) {
                 recommendations.push({
@@ -618,11 +667,24 @@ class ParentDashboard {
 
     loadDashboardData() {
         const saved = localStorage.getItem('spellbloc_dashboard');
-        if (saved) {
+        if (!saved) return;
+        try {
             const data = JSON.parse(saved);
-            this.childProfiles = new Map(data.childProfiles || []);
-            this.reports = data.reports || [];
-            this.customWordLists = data.customWordLists || [];
+            const entries = Array.isArray(data.childProfiles) ? data.childProfiles : [];
+            this.childProfiles = new Map(entries.map(([id, profile]) => {
+                if (!profile || typeof profile !== 'object') return [id, { id, name: id }];
+                const { analytics, ...rest } = profile;
+                return [id, rest];
+            }));
+            this.reports = Array.isArray(data.reports) ? data.reports : [];
+            this.customWordLists = Array.isArray(data.customWordLists) ? data.customWordLists : [];
+        } catch (e) {
+            try {
+                localStorage.setItem('spellbloc_dashboard_corrupt_' + Date.now(), saved);
+            } catch (ignore) { /* quota */ }
+            this.childProfiles = new Map();
+            this.reports = [];
+            this.customWordLists = [];
         }
     }
 

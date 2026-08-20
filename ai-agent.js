@@ -458,18 +458,7 @@ class SpellBlocAI {
 
     // HELPER METHODS
     recordAttempt(attempt) {
-        this.performanceHistory.push(attempt);
-        
-        // Keep only last 100 attempts
-        if (this.performanceHistory.length > 100) {
-            this.performanceHistory.shift();
-        }
-        
-        // Save to localStorage
-        this.savePerformanceData();
-        
-        // Update learning patterns
-        this.updateLearningPatterns(attempt);
+        this.updateLearningPatterns(attempt || {});
     }
 
     calculateAccuracy(attempts) {
@@ -565,23 +554,40 @@ class SpellBlocAI {
         }
     }
 
-    getChildLearningData(childId = 'default') {
+    getChildLearningData(childId) {
+        const id = childId || (typeof telemetry !== 'undefined' ? telemetry.getActiveChildId() : 'default');
+        const dump = (typeof telemetry !== 'undefined')
+            ? telemetry.dumpChild(id)
+            : { name: 'Player', attempts: this.performanceHistory };
         return {
-            name: 'Player',
-            level: playerLevel,
-            attempts: this.performanceHistory,
+            name: dump.name || 'Player',
+            level: typeof playerLevel !== 'undefined' ? playerLevel : 1,
+            attempts: (dump.attempts || []).map((a) => ({
+                word: a.word,
+                correct: a.correct,
+                timeSpent: a.durationMs || a.timeSpent || 0,
+                category: a.category,
+                timestamp: a.timestamp
+            })),
             personality: this.personalityEngine.getChildPersonality()
         };
     }
 
     savePerformanceData() {
-        localStorage.setItem('spellbloc_ai_performance', JSON.stringify(this.performanceHistory));
+        // Canonical store is telemetry.js; keep this key empty so it cannot drift.
     }
 
     async loadChildProfile() {
-        const saved = localStorage.getItem('spellbloc_ai_performance');
-        if (saved) {
-            this.performanceHistory = JSON.parse(saved);
+        // Attempts now load from telemetry (including migrated spellbloc_ai_performance).
+        if (typeof telemetry !== 'undefined') {
+            const dump = telemetry.dumpChild(telemetry.getActiveChildId());
+            this.performanceHistory = (dump.attempts || []).map((a) => ({
+                word: a.word,
+                correct: a.correct,
+                timeSpent: a.durationMs || 0,
+                category: a.category,
+                timestamp: a.timestamp
+            }));
         }
     }
 
