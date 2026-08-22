@@ -298,13 +298,22 @@ class TimedMode {
             timerElement.textContent = `⏰ ${this.timeRemaining}s`;
             
             // Change color based on time remaining
+            if (this.timeRemaining === 10) {
+                window.announce('10 seconds remaining!', true);
+            }
             if (this.timeRemaining <= 10) {
                 timerElement.style.color = '#ef4444'; // Red
-                timerElement.style.animation = 'pulse 1s infinite';
+                if (!accessibilityManager.settings.reducedMotion) {
+                    timerElement.style.animation = 'pulse 1s infinite';
+                } else {
+                    timerElement.style.animation = 'none';
+                }
             } else if (this.timeRemaining <= 20) {
                 timerElement.style.color = '#f59e0b'; // Orange
+                timerElement.style.animation = 'none';
             } else {
                 timerElement.style.color = '#10b981'; // Green
+                timerElement.style.animation = 'none';
             }
         }
     }
@@ -412,6 +421,16 @@ class PuzzleMode {
     }
 }
 
+// Accessibility Helper
+window.announce = function(message, assertive = false) {
+    const announcer = document.getElementById('accessibilityAnnouncer');
+    if (announcer) {
+        announcer.setAttribute('aria-live', assertive ? 'assertive' : 'polite');
+        announcer.textContent = message;
+        setTimeout(() => { announcer.textContent = ''; }, 3000);
+    }
+};
+
 // Accessibility Features
 class AccessibilityManager {
     constructor() {
@@ -421,7 +440,7 @@ class AccessibilityManager {
             fontSize: 'normal',
             colorBlindSupport: false,
             screenReader: false,
-            reducedMotion: false
+            reducedMotion: window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)').matches : false
         };
         this.loadSettings();
     }
@@ -447,8 +466,8 @@ class AccessibilityManager {
 
     enableScreenReader() {
         this.settings.screenReader = true;
-        document.body.setAttribute('aria-live', 'polite');
         this.saveSettings();
+        window.announce('Screen reader mode enabled');
     }
 
     saveSettings() {
@@ -1758,9 +1777,10 @@ function loadWord() {
     // Create drop zone slots
     dropZone.innerHTML = '';
     for (let i = 0; i < currentWord.length; i++) {
-        const slot = document.createElement('div');
+        const slot = document.createElement('button');
         slot.className = 'letter-slot';
         slot.dataset.index = i;
+        slot.setAttribute('aria-label', `Empty slot ${i + 1} of ${currentWord.length}`);
         dropZone.appendChild(slot);
     }
 
@@ -1775,6 +1795,8 @@ function loadWord() {
     } else {
         setTimeout(() => speakWord(currentWord), 500);
     }
+    
+    window.announce(`Spell the word: ${currentWord}. There are ${currentWord.length} letters.`, true);
 }
 
 function createLetterBank() {
@@ -1790,11 +1812,12 @@ function createLetterBank() {
     letterBank.style.opacity = '1';
     
     scrambled.forEach((letter, index) => {
-        const tile = document.createElement('div');
+        const tile = document.createElement('button');
         tile.className = 'letter-tile';
         tile.textContent = letter.toUpperCase();
         tile.dataset.letter = letter;
         tile.dataset.id = index;
+        tile.setAttribute('aria-label', `Letter ${letter.toUpperCase()}`);
         
         // Ensure proper styling and visibility
         tile.style.display = 'flex';
@@ -1826,13 +1849,16 @@ function handleLetterClick(tile) {
     if (currentSlotIndex < currentWord.length) {
         userAnswer.push({ letter, tileId: tile.dataset.id });
         tile.classList.add('used');
+        tile.setAttribute('aria-disabled', 'true');
 
         const slot = dropZone.children[currentSlotIndex];
         slot.textContent = letter.toUpperCase();
         slot.classList.add('filled');
         slot.dataset.tileId = tile.dataset.id;
+        slot.setAttribute('aria-label', `Slot ${currentSlotIndex + 1} contains letter ${letter.toUpperCase()}`);
 
         playSound('pop');
+        window.announce(`Letter ${letter.toUpperCase()} added.`, false);
 
         // Add click to remove
         slot.addEventListener('click', () => removeLetterFromSlot(slot, currentSlotIndex));
@@ -1851,6 +1877,7 @@ function removeLetterFromSlot(slot, slotIndex) {
     
     if (tile) {
         tile.classList.remove('used');
+        tile.removeAttribute('aria-disabled');
     }
 
     userAnswer.splice(slotIndex, 1);
@@ -1860,12 +1887,16 @@ function removeLetterFromSlot(slot, slotIndex) {
             s.textContent = userAnswer[i].letter.toUpperCase();
             s.classList.add('filled');
             s.dataset.tileId = userAnswer[i].tileId;
+            s.setAttribute('aria-label', `Slot ${i + 1} contains letter ${userAnswer[i].letter.toUpperCase()}`);
         } else {
             s.textContent = '';
             s.classList.remove('filled');
             delete s.dataset.tileId;
+            s.setAttribute('aria-label', `Empty slot ${i + 1}`);
         }
     });
+    
+    window.announce(`Letter removed. ${currentWord.length - userAnswer.length} slots left.`, false);
 }
 
 function deleteLast() {
@@ -1926,6 +1957,8 @@ function handleCorrectAnswer() {
     feedback.textContent = multiLanguage.translate('perfect') || '🎉 Perfect! Great job!';
     feedback.className = 'feedback correct';
     
+    window.announce('Correct!', true);
+    
     playSound('success');
     
     adaptiveLearning.recordAttempt(currentWord, currentCategory, true, timeToComplete * 1000);
@@ -1964,8 +1997,10 @@ function handleCorrectAnswer() {
     saveProgress();
     
     // Celebrate animation
-    wordImage.classList.add('celebrate');
-    setTimeout(() => wordImage.classList.remove('celebrate'), 500);
+    if (!accessibilityManager.settings.reducedMotion) {
+        wordImage.classList.add('celebrate');
+        setTimeout(() => wordImage.classList.remove('celebrate'), 500);
+    }
     
     // Auto-advance to next word or show round complete
     currentWordIndex++;
@@ -1990,6 +2025,8 @@ function handleIncorrectAnswer() {
     
     feedback.textContent = multiLanguage.translate('try_again') || '🤔 Try again! You can do it!';
     feedback.className = 'feedback incorrect';
+    
+    window.announce('Try again!', true);
     
     playSound('error');
     
@@ -2117,12 +2154,6 @@ document.addEventListener('touchstart', (e) => {
     touchStartY = e.touches[0].clientY;
 }, { passive: true });
 
-document.addEventListener('touchmove', (e) => {
-    // Prevent scrolling while playing
-    if (gameScreen.classList.contains('active')) {
-        e.preventDefault();
-    }
-}, { passive: false });
 // Advanced Feature Functions
 
 function switchActiveChild(childId) {

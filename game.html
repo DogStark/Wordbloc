@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -119,7 +119,7 @@
         <!-- Game Screen -->
         <div id="gameScreen" class="screen">
             <div class="game-header">
-                <button id="backBtn" class="icon-btn">🏠</button>
+                <button id="backBtn" class="icon-btn" aria-label="Home">🏠</button>
                 <div class="progress-bar">
                     <div id="progressFill" class="progress-fill"></div>
                 </div>
@@ -192,7 +192,7 @@
         <div id="dashboardScreen" class="screen">
             <div class="dashboard-header">
                 <h2>Parent Dashboard</h2>
-                <button id="dashboardBackBtn" class="icon-btn">🏠</button>
+                <button id="dashboardBackBtn" class="icon-btn" aria-label="Back to Home">🏠</button>
             </div>
 
             <div class="dashboard-content">
@@ -234,8 +234,8 @@
         </div>
 
         <!-- Settings Panel -->
-        <button id="settingsBtn" class="settings-btn">⚙️</button>
-        <button id="parentDashboardBtn" class="parent-dashboard-btn">📈</button>
+        <button id="settingsBtn" class="settings-btn" aria-label="Settings">⚙️</button>
+        <button id="parentDashboardBtn" class="parent-dashboard-btn" aria-label="Parent Dashboard">📈</button>
         <div id="settingsPanel" class="settings-panel">
             <h3>Settings</h3>
             <div class="settings-section">
@@ -276,6 +276,28 @@
     <!-- Authentication Check -->
     <script>
         // AuthManager verifies the token with /api/auth/verify and owns redirects/logout.
+    </script>
+    
+    <!-- ARIA Live Announcer for Screen Readers -->
+    <div id="accessibilityAnnouncer" aria-live="polite" class="sr-only"></div>
+
+    <!-- Automated Axe Accessibility Checks (Local Only) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/axe-core/4.8.2/axe.min.js"></script>
+    <script>
+        if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+            window.addEventListener('load', () => {
+                if (window.axe) {
+                    axe.run(function (err, results) {
+                        if (err) throw err;
+                        if (results.violations.length) {
+                            console.warn('Axe Accessibility Violations:', results.violations);
+                        } else {
+                            console.log('Axe Accessibility Checks Passed! 🎉');
+                        }
+                    });
+                }
+            });
+        }
     </script>
 </body>
 </html>
