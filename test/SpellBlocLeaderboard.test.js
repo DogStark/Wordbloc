@@ -163,7 +163,7 @@ describe("SpellBlocLeaderboard", function () {
           .updatePlayerStats(p1.address, 20, 10, 8, 3, 120)
       )
         .to.emit(leaderboard, "StatsUpdated")
-        .withArgs(p1.address, 20, 80); // (8*100)/10 = 80
+        .withArgs(p1.address, 20, 10, 8, 80, 3, 3, 120); // accuracy (8*100)/10 = 80
 
       let stats = await leaderboard.getPlayerStats(p1.address);
       expect(stats.wordsLearned).to.equal(20n);
@@ -193,8 +193,88 @@ describe("SpellBlocLeaderboard", function () {
         leaderboard.connect(owner).updatePlayerStats(p1.address, 0, 0, 0, 0, 0)
       )
         .to.emit(leaderboard, "StatsUpdated")
-        .withArgs(p1.address, 0, 0);
+        .withArgs(p1.address, 0, 0, 0, 0, 0, 0, 0);
     });
+
+    it("rejects updates that decrease cumulative wordsLearned, totalAttempts, or correctAttempts", async function () {
+      const { leaderboard, owner, p1 } = await loadFixture(
+        deployLeaderboardFixture
+      );
+      await leaderboard.connect(p1).registerPlayer("Alice", 5);
+      await leaderboard
+        .connect(owner)
+        .updatePlayerStats(p1.address, 20, 10, 8, 3, 120);
+
+      await expect(
+        leaderboard
+          .connect(owner)
+          .updatePlayerStats(p1.address, 19, 10, 8, 3, 10)
+      ).to.be.revertedWith("wordsLearned cannot decrease");
+
+      await expect(
+        leaderboard
+          .connect(owner)
+          .updatePlayerStats(p1.address, 20, 9, 8, 3, 10)
+      ).to.be.revertedWith("totalAttempts cannot decrease");
+
+      await expect(
+        leaderboard
+          .connect(owner)
+          .updatePlayerStats(p1.address, 20, 10, 7, 3, 10)
+      ).to.be.revertedWith("correctAttempts cannot decrease");
+    });
+
+    it("rejects correctAttempts greater than totalAttempts", async function () {
+      const { leaderboard, owner, p1 } = await loadFixture(
+        deployLeaderboardFixture
+      );
+      await leaderboard.connect(p1).registerPlayer("Alice", 5);
+      await expect(
+        leaderboard
+          .connect(owner)
+          .updatePlayerStats(p1.address, 5, 5, 6, 0, 10)
+      ).to.be.revertedWith("correctAttempts exceeds totalAttempts");
+    });
+  });
+
+  describe("SPEED (words-per-minute) score — division-by-zero fix", function () {
+    // Previously: wpm = totalPlayTime > 0 ? (wordsLearned * 60) / (totalPlayTime / 60) : 0
+    // For 1 <= totalPlayTime < 60, integer division made totalPlayTime / 60
+    // truncate to 0, so the outer division reverted. Fixed by computing
+    // (wordsLearned * 60) / totalPlayTime directly (multiply before divide).
+    const cases = [
+      { totalPlayTime: 0, wordsLearned: 10, expectedWpm: 0n },
+      { totalPlayTime: 1, wordsLearned: 1, expectedWpm: 60n },
+      { totalPlayTime: 59, wordsLearned: 59, expectedWpm: 60n },
+      { totalPlayTime: 60, wordsLearned: 10, expectedWpm: 10n },
+      { totalPlayTime: 3600, wordsLearned: 600, expectedWpm: 10n },
+    ];
+
+    for (const { totalPlayTime, wordsLearned, expectedWpm } of cases) {
+      it(`sessionTime=${totalPlayTime} does not revert and produces the documented SPEED score`, async function () {
+        const { leaderboard, owner, p1 } = await loadFixture(
+          deployLeaderboardFixture
+        );
+        await leaderboard.connect(p1).registerPlayer("Alice", 5);
+        await expect(
+          leaderboard
+            .connect(owner)
+            .updatePlayerStats(
+              p1.address,
+              wordsLearned,
+              wordsLearned,
+              wordsLearned,
+              0,
+              totalPlayTime
+            )
+        ).to.not.be.reverted;
+
+        const board = await leaderboard.getLeaderboard(Category.SPEED, 10);
+        expect(board.length).to.equal(1);
+        expect(board[0].player).to.equal(p1.address);
+        expect(board[0].score).to.equal(expectedWpm);
+      });
+    }
   });
 
   describe("Leaderboard ordering invariants", function () {
@@ -416,49 +496,12 @@ describe("SpellBlocLeaderboard", function () {
   });
 
   describe("MAX_LEADERBOARD_SIZE trimming boundary", function () {
-    // FINDING 3 (confirmed, DoS/availability — SpellBlocLeaderboard.sol):
-    // _sortLeaderboard (lines 288-308) is an UNCONDITIONAL O(n^2) bubble sort
-    // (no early exit, no "already sorted" fast path) that runs to completion
-    // on every single call, and _updatePlayerInLeaderboards (lines 148-171)
-    // invokes it/its age-group twin SIX times per updatePlayerStats call (five
-    // global categories + one age-group leaderboard). Gas cost per call
-    // therefore grows quadratically with leaderboard length.
-    //
-    // Measured on this exact toolchain (solc 0.8.19/200 runs, hardhat
-    // 2.28.6), gas for a single updatePlayerStats call:
-    //   len=10 -> ~2.50M   len=50 -> ~14.40M   len=70 -> ~23.34M
-    //   len=90 -> ~34.28M  len=100 -> ~40.50M gas
-    // That is BEFORE the contract's own MAX_LEADERBOARD_SIZE=100 cap is ever
-    // reached: it already exceeds Celo mainnet's current 30,000,000 block gas
-    // limit (docs.celo.org/protocol/transaction/gas-pricing; celoscan.io,
-    // ~30M as of mid-2026) somewhere around length ~82, and exceeds the
-    // 16,777,216 (2^24) EIP-7825 per-transaction gas cap that has been live
-    // on Ethereum mainnet since the Fusaka fork (2025-12-03) at length ~55 —
-    // reproduced exactly below. Celo has been rebasing onto the OP Stack
-    // (Jovian activated on Celo mainnet 2026-03-31) with its own Fusaka
-    // equivalent "contingently" targeted for Q2 2026, so it is plausible this
-    // tighter per-tx cap already applies on Celo mainnet too; regardless, the
-    // block-gas-limit failure alone is real and reachable well under the
-    // intended MAX_LEADERBOARD_SIZE.
-    //
-    // Impact: updatePlayerStats is the ONLY entry point for updating a
-    // player's stats, for EVERY player, not just new registrants. Once the
-    // leaderboard (or any single age group, which shares the same
-    // unconditional sort) grows past the failure threshold, every future call
-    // reverts out-of-gas permanently — there is no admin function to
-    // resize/paginate the sort or recover. This is a full, unrecoverable
-    // denial of service on the game's entire stats/leaderboard system,
-    // triggered by ordinary organic growth rather than an attacker.
-    //
-    // This test asserts the CONTRACT'S OWN documented invariant (constant
-    // named MAX_LEADERBOARD_SIZE, comment "Trim leaderboard if too large")
-    // that the leaderboard should remain updatable all the way to 100
-    // entries. It is left failing-but-skipped per the finding protocol
-    // rather than weakened to match the actual (broken) behavior. The
-    // companion test below reproduces the actual behavior and pins down how
-    // far below the intended cap the DoS triggers.
-    it.skip("[FINDING] keeps exactly the top MAX_LEADERBOARD_SIZE scorers when more players are registered", async function () {
-      this.timeout(120000);
+    // _updateLeaderboard now maintains the array sorted via a single O(n)
+    // scan-and-shift insertion instead of an unconditional O(n^2) bubble
+    // sort, so growing the leaderboard all the way to (and past)
+    // MAX_LEADERBOARD_SIZE stays cheap and never runs out of gas.
+    it("keeps exactly the top MAX_LEADERBOARD_SIZE scorers when more players are registered", async function () {
+      this.timeout(180000);
       const { leaderboard, owner, signers } = await loadFixture(
         deployLeaderboardFixture
       );
@@ -480,14 +523,17 @@ describe("SpellBlocLeaderboard", function () {
       }
 
       // Give each player a strictly increasing score so the LOWEST scorer
-      // (the very first one registered, score 0-indexed lowest) is the one
-      // that should be trimmed off once we exceed MAX_LEADERBOARD_SIZE.
+      // (the very first one registered) is the one that should be trimmed
+      // off once we exceed MAX_LEADERBOARD_SIZE.
+      let lastGasUsed = 0n;
       for (let i = 0; i < wallets.length; i++) {
         const player = wallets[i];
         await leaderboard.connect(player).registerPlayer(`P${i}`, 5);
-        await leaderboard
+        const tx = await leaderboard
           .connect(owner)
-          .updatePlayerStats(player.address, i + 1, 100, i + 1, 0, 0);
+          .updatePlayerStats(player.address, i + 1, i + 1, i + 1, 0, 0);
+        const receipt = await tx.wait();
+        lastGasUsed = receipt.gasUsed;
       }
 
       const board = await leaderboard.getLeaderboard(Category.OVERALL, MAX + 10);
@@ -502,79 +548,68 @@ describe("SpellBlocLeaderboard", function () {
       expect(board[0].player).to.equal(wallets[wallets.length - 1].address);
       expect(board[0].rank).to.equal(1n);
       expect(board[MAX - 1].rank).to.equal(BigInt(MAX));
+
+      // Trimmed player must report an unranked (0) rank, not a stale one.
+      expect(
+        await leaderboard.getPlayerRank(wallets[0].address, Category.OVERALL)
+      ).to.equal(0n);
+
+      // Gas ceiling: a single updatePlayerStats call that fills/evicts
+      // across a completely full MAX_LEADERBOARD_SIZE=100 board (worst
+      // case across all 6 leaderboards it touches) measures ~11.8M gas on
+      // this toolchain — a constant bound set only by MAX_LEADERBOARD_SIZE,
+      // never by how many players have ever registered, and comfortably
+      // under real block gas limits (Celo mainnet ~30M as of mid-2026).
+      // Previously (unconditional O(n^2) bubble sort x6) this same
+      // operation exceeded 10M gas by leaderboard length ~55 and kept
+      // growing without bound.
+      expect(lastGasUsed).to.be.lessThan(15_000_000n);
     });
 
-    it("[ACTUAL BEHAVIOR — quantifies FINDING 3] updatePlayerStats runs out of gas and becomes permanently unusable well before the leaderboard reaches MAX_LEADERBOARD_SIZE, due to the unconditional O(n^2) sort in _sortLeaderboard", async function () {
-      // solidity-coverage instruments every opcode for line/branch tracking,
-      // which inflates per-call wall-clock time by 10-100x and skews gas
-      // accounting entirely (documented solidity-coverage limitation) — the
-      // gas-boundary numbers this test relies on are only meaningful against
-      // a normal (non-instrumented) compile. Skip under `hardhat coverage`
-      // (flagged via hre.__SOLIDITY_COVERAGE_RUNNING); the plain `hardhat
-      // test` run is what demonstrates the finding.
-      if (hre.__SOLIDITY_COVERAGE_RUNNING) {
-        this.skip();
-      }
-
+    it("evicting a player from the top-N leaves their rank at 0 (never stale) across all affected categories", async function () {
       this.timeout(120000);
       const { leaderboard, owner, signers } = await loadFixture(
         deployLeaderboardFixture
       );
       const MAX = Number(await leaderboard.MAX_LEADERBOARD_SIZE());
-
-      // Grow the leaderboard one player at a time (monotonically increasing
-      // score, the cheapest case for the bubble sort — real usage with mixed
-      // scores costs the same or more comparisons) until a call reverts, or
-      // until comfortably past where the DoS is expected to trigger.
-      const probeLimit = 70;
       const funder = signers[0];
-      let lastSuccessfulLen = 0;
-      let lastSuccessfulGasUsed = 0n;
-      let failedAtLen = null;
-
-      for (let i = 0; i < probeLimit; i++) {
+      const wallets = [];
+      for (let i = 0; i < MAX; i++) {
         const wallet = ethers.Wallet.createRandom().connect(ethers.provider);
         await funder.sendTransaction({
           to: wallet.address,
           value: ethers.parseEther("1"),
         });
-        await leaderboard.connect(wallet).registerPlayer(`P${i}`, 5);
-
-        try {
-          const tx = await leaderboard
-            .connect(owner)
-            .updatePlayerStats(wallet.address, i + 1, 100, i + 1, 0, 0);
-          const receipt = await tx.wait();
-          lastSuccessfulLen = i + 1;
-          lastSuccessfulGasUsed = receipt.gasUsed;
-        } catch (e) {
-          failedAtLen = i + 1;
-          break;
-        }
+        wallets.push(wallet);
+        await leaderboard.connect(wallet).registerPlayer(`Q${i}`, 5);
+        await leaderboard
+          .connect(owner)
+          .updatePlayerStats(wallet.address, i + 1, i + 1, i + 1, 0, 0);
       }
 
-      // The DoS must be reproducible: a call must actually fail before we
-      // exhaust the probe range.
-      expect(failedAtLen, "expected updatePlayerStats to fail before " +
-        probeLimit + " entries — if this no longer fails, the O(n^2) sort " +
-        "may have been fixed and this finding/test should be revisited"
-      ).to.not.equal(null);
+      // wallets[0] currently holds the lowest score and sits at the bottom
+      // of the (now full) leaderboard.
+      expect(
+        await leaderboard.getPlayerRank(wallets[0].address, Category.OVERALL)
+      ).to.equal(BigInt(MAX));
 
-      // The failure must occur STRICTLY below the contract's own intended
-      // capacity — i.e. the MAX_LEADERBOARD_SIZE trim can never actually
-      // kick in under organic growth because the gas cost gets there first.
-      expect(failedAtLen).to.be.lessThan(MAX);
+      // A new player with a higher score than everyone evicts wallets[0].
+      const newcomer = ethers.Wallet.createRandom().connect(ethers.provider);
+      await funder.sendTransaction({
+        to: newcomer.address,
+        value: ethers.parseEther("1"),
+      });
+      await leaderboard.connect(newcomer).registerPlayer("Newcomer", 5);
+      await leaderboard
+        .connect(owner)
+        .updatePlayerStats(newcomer.address, MAX + 1, MAX + 1, MAX + 1, 0, 0);
 
-      // Sanity: gas cost for the last successful call should already be a
-      // large fraction of a typical ~30-60M block gas limit, demonstrating
-      // this is a real capacity problem and not a test-harness fluke.
-      expect(lastSuccessfulGasUsed).to.be.greaterThan(10_000_000n);
-
-      console.log(
-        `        [gas curve] last successful update at length=${lastSuccessfulLen} ` +
-        `used ${lastSuccessfulGasUsed} gas; length=${failedAtLen} reverted ` +
-        `(MAX_LEADERBOARD_SIZE=${MAX})`
-      );
+      expect(
+        await leaderboard.getPlayerRank(wallets[0].address, Category.OVERALL)
+      ).to.equal(0n);
+      expect(
+        await leaderboard.getPlayerRank(newcomer.address, Category.OVERALL)
+      ).to.equal(1n);
     });
   });
 
@@ -614,22 +649,46 @@ describe("SpellBlocLeaderboard", function () {
       );
     });
 
-    it("[OBSERVED, matches the contract's own comment] a deactivated player is NOT removed from existing leaderboard entries", async function () {
-      const { leaderboard, owner, p1 } = await loadFixture(
+    it("a deactivated player is removed from every leaderboard and reports rank 0, not a stale rank", async function () {
+      const { leaderboard, owner, p1, p2 } = await loadFixture(
         deployLeaderboardFixture
       );
       await registerAndUpdate(leaderboard, owner, p1, {
+        ageGroup: 4,
         wordsLearned: 10,
         totalAttempts: 10,
         correctAttempts: 5,
+        currentStreak: 2,
       });
+      await registerAndUpdate(leaderboard, owner, p2, {
+        ageGroup: 4,
+        wordsLearned: 20,
+        totalAttempts: 20,
+        correctAttempts: 10,
+        currentStreak: 1,
+      });
+
       const threshold = Number(await leaderboard.INACTIVITY_THRESHOLD());
       await time.increase(threshold + 1);
       await leaderboard.connect(owner).removeInactivePlayers([p1.address]);
 
       const board = await leaderboard.getLeaderboard(Category.OVERALL, 10);
       expect(board.length).to.equal(1);
-      expect(board[0].player).to.equal(p1.address);
+      expect(board[0].player).to.equal(p2.address);
+
+      const words = await leaderboard.getLeaderboard(Category.WORDS_LEARNED, 10);
+      expect(words.map((e) => e.player)).to.not.include(p1.address);
+
+      const ageGroup4 = await leaderboard.getAgeGroupLeaderboard(4, 10);
+      expect(ageGroup4.length).to.equal(1);
+      expect(ageGroup4[0].player).to.equal(p2.address);
+
+      for (const category of Object.values(Category)) {
+        if (category === Category.AGE_GROUP) continue;
+        expect(await leaderboard.getPlayerRank(p1.address, category)).to.equal(
+          0n
+        );
+      }
     });
   });
 
@@ -644,6 +703,155 @@ describe("SpellBlocLeaderboard", function () {
       await expect(leaderboard.connect(other).unpause()).to.be.revertedWith(
         "Ownable: caller is not the owner"
       );
+    });
+  });
+
+  describe("lastGlobalUpdate", function () {
+    it("advances on leaderboard-affecting changes (stats update, inactive removal)", async function () {
+      const { leaderboard, owner, p1 } = await loadFixture(
+        deployLeaderboardFixture
+      );
+      const [, initial] = await leaderboard.getGlobalStats();
+
+      await leaderboard.connect(p1).registerPlayer("Alice", 5);
+      await time.increase(10);
+      await leaderboard
+        .connect(owner)
+        .updatePlayerStats(p1.address, 10, 10, 10, 1, 60);
+      const [, afterUpdate] = await leaderboard.getGlobalStats();
+      expect(afterUpdate).to.be.greaterThan(initial);
+
+      await time.increase(Number(await leaderboard.INACTIVITY_THRESHOLD()) + 1);
+      await leaderboard.connect(owner).removeInactivePlayers([p1.address]);
+      const [, afterRemoval] = await leaderboard.getGlobalStats();
+      expect(afterRemoval).to.be.greaterThan(afterUpdate);
+    });
+  });
+
+  describe("Events sufficient for a deterministic off-chain indexer", function () {
+    it("emits LeaderboardScoreUpdated for every category on every update, even when rank does not change", async function () {
+      const { leaderboard, owner, p1, p2 } = await loadFixture(
+        deployLeaderboardFixture
+      );
+      await registerAndUpdate(leaderboard, owner, p1, {
+        wordsLearned: 100,
+        totalAttempts: 100,
+        correctAttempts: 100,
+        currentStreak: 5,
+        sessionTime: 600,
+      });
+      await leaderboard.connect(p2).registerPlayer("Bob", 5);
+
+      // p2's first update keeps it below p1 in every category (rank
+      // unchanged for p1), but every category must still report the fresh
+      // score via LeaderboardScoreUpdated for an indexer to stay correct.
+      const tx = await leaderboard
+        .connect(owner)
+        .updatePlayerStats(p2.address, 1, 1, 1, 1, 60);
+      await expect(tx)
+        .to.emit(leaderboard, "LeaderboardScoreUpdated")
+        .withArgs(Category.OVERALL, p2.address, 4240n, 2n);
+      await expect(tx)
+        .to.emit(leaderboard, "LeaderboardScoreUpdated")
+        .withArgs(Category.WORDS_LEARNED, p2.address, 1n, 2n);
+      await expect(tx)
+        .to.emit(leaderboard, "AgeGroupScoreUpdated");
+    });
+
+    it("emits LeaderboardEntryRemoved when a player is evicted from a full leaderboard", async function () {
+      this.timeout(120000);
+      const { leaderboard, owner, signers } = await loadFixture(
+        deployLeaderboardFixture
+      );
+      const MAX = Number(await leaderboard.MAX_LEADERBOARD_SIZE());
+      const funder = signers[0];
+      let lowest;
+      for (let i = 0; i < MAX; i++) {
+        const wallet = ethers.Wallet.createRandom().connect(ethers.provider);
+        await funder.sendTransaction({
+          to: wallet.address,
+          value: ethers.parseEther("1"),
+        });
+        if (i === 0) lowest = wallet;
+        await leaderboard.connect(wallet).registerPlayer(`R${i}`, 5);
+        await leaderboard
+          .connect(owner)
+          .updatePlayerStats(wallet.address, i + 1, i + 1, i + 1, 0, 0);
+      }
+
+      const newcomer = ethers.Wallet.createRandom().connect(ethers.provider);
+      await funder.sendTransaction({
+        to: newcomer.address,
+        value: ethers.parseEther("1"),
+      });
+      await leaderboard.connect(newcomer).registerPlayer("Newcomer", 5);
+      await expect(
+        leaderboard
+          .connect(owner)
+          .updatePlayerStats(newcomer.address, MAX + 1, MAX + 1, MAX + 1, 0, 0)
+      )
+        .to.emit(leaderboard, "LeaderboardEntryRemoved")
+        .withArgs(Category.OVERALL, lowest.address);
+    });
+  });
+
+  describe("Fuzz — score arithmetic never overflows/reverts for valid inputs", function () {
+    it("random valid (monotonic, in-range) stat sequences never revert and match the documented score formulas", async function () {
+      this.timeout(120000);
+      const { leaderboard, owner, p1 } = await loadFixture(
+        deployLeaderboardFixture
+      );
+      await leaderboard.connect(p1).registerPlayer("Fuzzer", 5);
+
+      let wordsLearned = 0;
+      let totalAttempts = 0;
+      let correctAttempts = 0;
+      let totalPlayTime = 0;
+
+      const ITERATIONS = 40;
+      for (let iter = 0; iter < ITERATIONS; iter++) {
+        wordsLearned += Math.floor(Math.random() * 1000);
+        const attemptsDelta = Math.floor(Math.random() * 1000);
+        totalAttempts += attemptsDelta;
+        correctAttempts += Math.floor(Math.random() * (attemptsDelta + 1));
+        const currentStreak = Math.floor(Math.random() * 500);
+        const sessionTime = Math.floor(Math.random() * 100000);
+        totalPlayTime += sessionTime;
+
+        await expect(
+          leaderboard
+            .connect(owner)
+            .updatePlayerStats(
+              p1.address,
+              wordsLearned,
+              totalAttempts,
+              correctAttempts,
+              currentStreak,
+              sessionTime
+            )
+        ).to.not.be.reverted;
+
+        const expectedAccuracy =
+          totalAttempts > 0
+            ? Math.floor((correctAttempts * 100) / totalAttempts)
+            : 0;
+        const expectedWpm =
+          totalPlayTime > 0
+            ? Math.floor((wordsLearned * 60) / totalPlayTime)
+            : 0;
+
+        const accBoard = await leaderboard.getLeaderboard(
+          Category.ACCURACY,
+          10
+        );
+        expect(accBoard[0].score).to.equal(BigInt(expectedAccuracy));
+
+        const speedBoard = await leaderboard.getLeaderboard(
+          Category.SPEED,
+          10
+        );
+        expect(speedBoard[0].score).to.equal(BigInt(expectedWpm));
+      }
     });
   });
 
